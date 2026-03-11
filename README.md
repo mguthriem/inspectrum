@@ -47,6 +47,7 @@ This template is optimized for working with GitHub Copilot and other AI assistan
 3. **Implement** - Build features step by step
 4. **Test** - Verify each change works
 5. **Review** - Get code review from AI after major changes
+6. **Record** - Key findings are saved to [docs/ground_truths.md](docs/ground_truths.md) so context persists across sessions
 
 **See [.github/copilot-instructions.md](.github/copilot-instructions.md)** - This file contains detailed instructions that tell Copilot how to help you effectively.
 
@@ -62,7 +63,8 @@ This template is optimized for working with GitHub Copilot and other AI assistan
 ├── tests/
 │   └── test_cli.py                # Example CLI tests
 ├── docs/
-│   └── getting-started.md         # Setup guide
+│   ├── getting-started.md         # Setup guide
+│   └── ground_truths.md           # Key findings & decisions log
 ├── pyproject.toml                 # Package configuration
 └── README.md                      # This file
 ```
@@ -81,8 +83,9 @@ pytest -v                           # Verbose output
 2. **Describe your project** - Fill out [docs/project.md](docs/project.md) to help Copilot understand what you're building
 3. **Let AI help** - Ask Copilot to assess and plan before implementing
 4. **Test as you go** - Run pytest after each feature
-5. **Commit often** - Small commits are easier to track
-6. **Read the AI instructions** - [.github/copilot-instructions.md](.github/copilot-instructions.md) explains the recommended workflow
+5. **Keep ground truths** - Key findings are logged in [docs/ground_truths.md](docs/ground_truths.md) so AI remembers context between sessions
+6. **Commit often** - Small commits are easier to track
+7. **Read the AI instructions** - [.github/copilot-instructions.md](.github/copilot-instructions.md) explains the recommended workflow
 
 ## 🆘 Getting Help
 

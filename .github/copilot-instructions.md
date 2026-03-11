@@ -9,6 +9,7 @@ This file configures how GitHub Copilot should assist with development in this r
 3. **Focus on progress tracking** - Users should always know what's happening and what's next
 4. **Test incrementally** - Each step should be testable
 5. **Review after major changes** - Use sub-agents for code review
+6. **Ground truths** - ALWAYS write key findings in docs/ground_truths.md for future reference and to help guide future development. Always update the file with new findings, and make sure to link to it in the relevant documentation and code comments.
 
 ## 🔄 Standard Workflow for Every Request
 

@@ -93,13 +93,15 @@ your-project/
 │   ├── copilot-instructions.md   # ⭐ AI assistant guide
 │   └── workflows/                # CI/CD automation
 ├── docs/
-│   └── getting-started.md        # This file
+│   ├── getting-started.md        # This file
+│   └── ground_truths.md          # Key findings & decisions log
 └── pyproject.toml                # Package configuration
 ```
 
 **Key files:**
 - **`pyproject.toml`** - Defines your package metadata and dependencies
 - **`.github/copilot-instructions.md`** - Instructions for how AI should help you
+- **`docs/ground_truths.md`** - Persistent log of key findings and decisions (see below)
 - **`src/package_name/cli.py`** - Simple example showing Click CLI pattern
 - **`tests/test_cli.py`** - Shows how to test CLI commands with CliRunner
 
@@ -108,6 +110,18 @@ your-project/
 This template is designed for AI-assisted development. The workflow is:
 
 ### 1. Assess → 2. Plan → 3. Implement → 4. Test → 5. Review
+
+### Ground Truths: Persistent Context Across Sessions
+
+AI assistants like Copilot don't remember previous conversations. To solve this, the template includes a **ground truths** file at [docs/ground_truths.md](ground_truths.md) where key findings and decisions are recorded during development.
+
+Copilot is instructed to automatically update this file when it discovers important facts — such as API quirks, design decisions, or configuration requirements. This means the next time you start a session, Copilot can read the file and pick up where you left off.
+
+You can also add entries manually. Use the format:
+```markdown
+### YYYY-MM-DD: Brief title
+Description of the finding and why it matters.
+```
 
 **Example: Adding a new feature**
 
@@ -244,6 +258,7 @@ source venv/bin/activate # Reactivate it
 ## 📚 Additional Resources
 
 - **AI Instructions**: [.github/copilot-instructions.md](../.github/copilot-instructions.md) - How AI will help you
+- **Ground Truths**: [docs/ground_truths.md](ground_truths.md) - Key findings log that persists across AI sessions
 - **CLI Example**: Check `src/package_name/cli.py` for a simple Click pattern
 - **Test Example**: See `tests/test_cli.py` for CLI testing with CliRunner
 - **Package Config**: Review `pyproject.toml` for dependencies and settings
