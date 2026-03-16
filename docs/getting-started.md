@@ -4,12 +4,27 @@ This guide will help you set up the template and start building your Python pack
 
 ## 📋 Prerequisites
 
-- Python 3.9 or higher
 - Git installed
+- [Pixi](https://pixi.sh) installed (`curl -fsSL https://pixi.sh/install.sh | sh`)
+- [GSAS-II](https://gsas-ii.readthedocs.io/) installed separately (see below)
 - GitHub Copilot (or another AI coding assistant)
 - A code editor (VS Code recommended)
 
-Check Python version: `python --version`
+Check pixi is available: `pixi --version`
+
+### GSAS-II Installation
+
+GSAS-II is a prerequisite for inspectrum but is **not** managed by pixi or pip — it has its own build process involving Fortran compilers and platform-specific tooling. Install it separately following the [GSAS-II installation guide](https://gsas-ii.readthedocs.io/).
+
+GSAS-II also provides a pixi-based setup (see its `pixi/pixi.toml`). The inspectrum dependency versions are aligned with GSAS-II's requirements to ensure compatibility:
+
+| Package    | Minimum version | Why |
+|------------|----------------|-----|
+| Python     | 3.10           | GSAS-II range: 3.10–3.13 |
+| numpy      | 2.2.0          | Matches GSAS-II >=2.2.1 |
+| scipy      | 1.15.0         | Matches GSAS-II >=1.15.0 |
+| matplotlib | 3.10.0         | Matches GSAS-II >=3.10.0 |
+| h5py       | 3.12.0         | Matches GSAS-II >=3.12.1 |
 
 ## 🚀 Setup (3 Main Steps)
 
@@ -31,28 +46,31 @@ git init
 ### Step 2: Set Up Your Environment
 
 ```bash
-# Create virtual environment
-python -m venv venv
+# Install the project and dev dependencies
+pixi install
 
-# Activate it
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install package in development mode
-pip install -e ".[dev]"
+# Activate the environment
+pixi shell
 ```
 
-**What does `pip install -e ".[dev]"` do?**
-- `-e` = editable mode (your code changes take effect immediately)
-- `.` = install from current directory
-- `[dev]` = include development tools (pytest, ruff, black, mypy)
+**What does `pixi install` do?**
+- Reads `[tool.pixi]` config from `pyproject.toml`
+- Resolves dependencies from conda-forge and PyPI
+- Creates a reproducible environment in `.pixi/`
+- Installs your package in editable mode
 
-**Alternative: Using Pixi**
-
-If you prefer [pixi](https://pixi.sh) for reproducible environments:
+**Using extra environments:**
 ```bash
-pixi init --import pyproject.toml
-pixi install
-pixi shell
+pixi install -e science    # Include scipy, matplotlib, etc.
+pixi install -e all        # Install everything
+```
+
+**Alternative: Using venv (if pixi is not available)**
+
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -e ".[dev]"
 ```
 
 ### Step 3: Customize the Package
@@ -73,8 +91,8 @@ authors = [{name = "Your Name", email = "you@example.com"}]
 
 **Verify it works:**
 ```bash
-pytest                    # Run tests
-ruff check src/          # Check code style
+pixi run pytest              # Run tests
+pixi run ruff check src/     # Check code style
 ```
 
 If tests pass, you're ready! ✅
@@ -176,21 +194,24 @@ Run tests frequently as you develop:
 
 ```bash
 # Run all tests
-pytest
+pixi run pytest
 
 # Run with verbose output
-pytest -v
+pixi run pytest -v
 
 # Run specific test file
-pytest tests/test_core.py
+pixi run pytest tests/test_core.py
 
 # Run with coverage report
-pytest --cov=src/package_name
+pixi run pytest --cov=src/package_name
 
 # Run and show which lines aren't tested
-pytest --cov=src/package_name --cov-report=html
+pixi run pytest --cov=src/package_name --cov-report=html
 # Open htmlcov/index.html in browser
 ```
+
+> **Tip:** If you activate the environment with `pixi shell`, you can run
+> `pytest` directly without the `pixi run` prefix.
 
 **Writing your own tests:**
 

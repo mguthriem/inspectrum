@@ -1,12 +1,9 @@
 """
-Command-line interface for package_name.
-
-A simple example CLI to demonstrate how to create command-line tools.
-Replace this with your own commands as you build your package.
+Command-line interface for inspectrum.
 
 Example usage:
-    $ python -m package_name.cli
-    $ python -m package_name.cli --name "World"
+    $ python -m inspectrum.cli
+    $ python -m inspectrum.cli --name "World"
 """
 
 import click
@@ -23,8 +20,8 @@ def main(name: str):
     Replace this with your actual functionality!
 
     Example:
-        python -m package_name.cli
-        python -m package_name.cli --name "Copilot"
+        python -m inspectrum.cli
+        python -m inspectrum.cli --name "Copilot"
     """
     click.echo(f"Hello, {name}! 👋")
     click.echo("\nThis is a template CLI. Replace it with your own commands!")

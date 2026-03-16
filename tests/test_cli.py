@@ -6,7 +6,7 @@ Shows how to test Click commands using the CliRunner.
 
 from click.testing import CliRunner
 
-from package_name.cli import main
+from inspectrum.cli import main
 
 
 def test_cli_default_greeting():

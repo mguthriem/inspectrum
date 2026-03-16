@@ -14,17 +14,25 @@ It's designed to be **simple enough to understand** but **complete enough to bui
 
 ## 🚀 Quick Start (3 steps)
 
+### Prerequisites
+
+- [Pixi](https://pixi.sh) for environment management
+- [GSAS-II](https://gsas-ii.readthedocs.io/) installed and accessible (see [docs/getting-started.md](docs/getting-started.md))
+- Python 3.10–3.13 (managed by pixi)
+
 ### 1. Create your repository
 Click "Use this template" on GitHub, or clone and rename this repo.
 
 ### 2. Set up your environment
 ```bash
-# Create and activate a virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+# Install pixi if you haven't already (https://pixi.sh)
+curl -fsSL https://pixi.sh/install.sh | sh
 
-# Install with dev dependencies
-pip install -e ".[dev]"
+# Install the project and dev dependencies
+pixi install
+
+# Activate the environment
+pixi shell
 ```
 
 ### 3. Customize and start building
@@ -72,10 +80,12 @@ This template is optimized for working with GitHub Copilot and other AI assistan
 ## 🧪 Running Tests
 
 ```bash
-pytest                              # Run all tests
-pytest --cov=src/package_name      # With coverage report
-pytest -v                           # Verbose output
+pixi run pytest                              # Run all tests
+pixi run pytest --cov=src/package_name      # With coverage report
+pixi run pytest -v                           # Verbose output
 ```
+
+Or activate the environment first with `pixi shell`, then run `pytest` directly.
 
 ## 💡 Tips for Getting Started
 

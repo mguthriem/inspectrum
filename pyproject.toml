@@ -3,32 +3,36 @@ requires = ["setuptools>=65.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "package-name"  # Change this to your package name
+name = "inspectrum"
 version = "0.1.0"
-description = "A scientific data processing package"
+description = "Pre-inspection of diffraction spectra for Rietveld refinement"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = {text = "BSD-3-Clause"}
 authors = [
     {name = "Your Name", email = "your.email@example.com"}
 ]
-keywords = ["science", "data", "processing"]
+keywords = ["science", "data", "processing", "spectroscopy", "diffraction"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: BSD License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering",
 ]
 
-# Core dependencies
+# Core dependencies — version floors aligned with GSAS-II compatibility
 dependencies = [
-    "numpy>=1.24.0",
+    "numpy>=2.2.0",
+    "scipy>=1.15.0",
+    "matplotlib>=3.10.0",
+    "h5py>=3.12.0",
     "pandas>=2.0.0",
+    "cryspy>=0.10.0",
 ]
 
 [project.optional-dependencies]
@@ -42,45 +46,9 @@ dev = [
     "pre-commit>=3.4.0",
 ]
 
-# Web application dependencies
-web = [
-    "flask>=3.0.0",
-    "jinja2>=3.1.0",
-    "bootstrap-flask>=2.3.0",
-]
-
-# API/MCP server dependencies
-api = [
-    "fastapi>=0.104.0",
-    "uvicorn[standard]>=0.24.0",
-    "pydantic>=2.4.0",
-]
-
-# CLI dependencies
-cli = [
-    "click>=8.1.0",
-    "tqdm>=4.66.0",
-    "python-dotenv>=1.0.0",
-]
-
-# Data science extras
-science = [
-    "scipy>=1.11.0",
-    "matplotlib>=3.8.0",
-    "plotly>=5.17.0",
-    "scikit-learn>=1.3.0",
-]
-
-# Documentation
-docs = [
-    "sphinx>=7.2.0",
-    "sphinx-rtd-theme>=1.3.0",
-    "myst-parser>=2.0.0",
-]
-
 # All optional dependencies
 all = [
-    "package-name[dev,web,api,cli,science,docs]",
+    "inspectrum[dev]",
 ]
 
 [project.urls]
@@ -91,13 +59,60 @@ Issues = "https://github.com/yourusername/your-repo/issues"
 
 [project.scripts]
 # Command-line interface (uncomment and customize after implementing CLI)
-# your-package = "package_name.cli:main"
+# inspectrum = "inspectrum.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-package_name = ["py.typed"]
+inspectrum = ["py.typed"]
+
+# ── Pixi configuration ──────────────────────────────────────────────
+[tool.pixi.project]
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "osx-64", "linux-64"]
+
+[tool.pixi.pypi-dependencies]
+inspectrum = { path = ".", editable = true }
+cryspy = ">=0.10.0"
+
+[tool.pixi.dependencies]
+python = ">=3.10"
+numpy = ">=2.2.0,<3"
+scipy = ">=1.15.0,<2"
+matplotlib-base = ">=3.10.0,<4"
+h5py = ">=3.12.0,<4"
+pandas = ">=2.0.0,<3"
+
+# Development tools
+[tool.pixi.feature.dev.dependencies]
+pytest = ">=7.4.0"
+pytest-cov = ">=4.1.0"
+ruff = ">=0.1.0"
+black = ">=23.0.0"
+mypy = ">=1.5.0"
+pre-commit = ">=3.4.0"
+
+# Python version features (match GSAS-II supported range)
+[tool.pixi.feature.py310.dependencies]
+python = ">=3.10,<3.11"
+
+[tool.pixi.feature.py311.dependencies]
+python = ">=3.11,<3.12"
+
+[tool.pixi.feature.py312.dependencies]
+python = ">=3.12,<3.13"
+
+[tool.pixi.feature.py313.dependencies]
+python = ">=3.13,<3.14"
+
+# Environments
+[tool.pixi.environments]
+default = { features = ["dev"], solve-group = "default" }
+py310 = { features = ["dev", "py310"], solve-group = "py310" }
+py311 = { features = ["dev", "py311"], solve-group = "py311" }
+py312 = { features = ["dev", "py312"], solve-group = "py312" }
+py313 = { features = ["dev", "py313"], solve-group = "py313" }
 
 # Pytest configuration
 [tool.pytest.ini_options]
@@ -111,7 +126,7 @@ addopts = [
     "-ra",                      # Show summary of all test outcomes
     "--strict-markers",         # Error on unknown markers
     "--strict-config",          # Error on unknown config options
-    "--cov=src/package_name",   # Coverage for your package
+    "--cov=src/inspectrum",     # Coverage for your package
     "--cov-report=term-missing", # Show missing lines in coverage
     "--cov-report=html",        # Generate HTML coverage report
 ]
@@ -143,7 +158,7 @@ exclude_lines = [
 # Ruff configuration (linting and formatting)
 [tool.ruff]
 line-length = 88
-target-version = "py39"
+target-version = "py310"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
@@ -173,12 +188,12 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["package_name"]
+known-first-party = ["inspectrum"]
 
 # Black configuration (code formatting)
 [tool.black]
 line-length = 88
-target-version = ["py39", "py310", "py311", "py312"]
+target-version = ["py310", "py311", "py312", "py313"]
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -191,7 +206,7 @@ extend-exclude = '''
 
 # MyPy configuration (type checking)
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false  # Set to true for stricter type checking
