@@ -17,6 +17,15 @@ This file captures key findings, decisions, and verified facts discovered during
 
 The organisation uses pixi for deployment. The project uses `[tool.pixi.*]` sections in `pyproject.toml` (not a separate `pixi.toml`) for environment management. venv instructions are kept as a fallback in docs but pixi is the primary workflow.
 
+### 2026-03-17: Pixi environment setup — TLS and Python version
+
+- **pixi binary**: `~/.pixi/bin/pixi` (v0.62.1). Not on PATH by default.
+- **TLS issue**: ORNL network uses a TLS-intercepting proxy causing `invalid peer certificate: UnknownIssuer`. Fix: `~/.config/pixi/config.toml` with `tls-no-verify = true`. This is machine-local, not committed.
+- **Python pinned to `>=3.10,<3.14`**: Without an upper bound pixi solved to Python 3.14, which broke pandas. GSAS-II supports 3.10–3.13.
+- **`[tool.pixi.project]` → `[tool.pixi.workspace]`**: Pixi 0.62 deprecated `project` in favour of `workspace`.
+- **Verified env**: Python 3.13.12, numpy 2.4.2, scipy 1.17.1, matplotlib 3.10.8, h5py 3.15.1, pandas 2.3.3, cryspy, inspectrum 0.1.0. All 115 tests pass.
+- **Pixi tasks**: `pixi run test` (pytest), editable install via `inspectrum = { path = ".", editable = true }` in pypi-dependencies.
+
 ### 2026-03-11: GSAS-II is a prerequisite, not a managed dependency
 
 GSAS-II has a complex build process (Fortran compilers, platform-specific tooling) and cannot be installed via pip or conda. It must be installed separately. inspectrum's dependency version floors are aligned with GSAS-II's `pixi/pixi.toml` to ensure compatibility:
@@ -79,3 +88,67 @@ GSA (TOF) and CSV (d-spacing) files for the same SNAP run contain the same numbe
 ### 2026-03-16: TODO — Mantid workspace loader
 
 Future enhancement: add a loader that reads directly from a Mantid `Workspace2D` object (in-memory, no file I/O). This is for live-processing workflows where inspectrum is called from within Mantid scripts. Logged for Phase 3+.
+
+### 2026-03-16: CRITICAL DESIGN DECISION — inspectrum does NOT refine
+
+inspectrum's purpose is to **estimate good starting parameters** for Rietveld refinement, *without* performing a refinement itself. Rietveld refinements diverge when initial parameters are too far from the true values — inspectrum solves this by inspecting the spectrum directly.
+
+**What inspectrum is NOT**: a profile-fitting optimizer or least-squares refinement engine. Do not use `scipy.optimize.least_squares` or similar to fit a calculated pattern to observed data — that *is* refinement and will suffer the same divergence problems.
+
+**What inspectrum IS**: a peak-matching and parameter estimation tool. The pipeline:
+
+1. **Calculate expected peak positions + intensities** from CIF lattice parameters and structure factors (crystallography module)
+2. **Pre-process**: remove structured background (rolling ball technique) to cleanly expose peaks
+3. **Find peaks** in the cleaned observed spectrum (peak detection)
+4. **Match observed peaks to calculated peaks** — this is a 1D array matching problem (experimental mini-phase, needs experimentation)
+5. **Estimate lattice parameters** from the offsets between matched peak positions (geometric/analytical)
+6. **Estimate scale and peak widths** from observed peak heights and shapes
+
+**Parameters to estimate at this stage**: lattice parameters (a, b, c, α, β, γ), relative scale factors (per phase), peak widths. These are sufficient to bootstrap a Rietveld refinement.
+
+**Inspection via Mantid Workbench**: users will visually inspect intermediate results (background-subtracted spectra, found peaks, matched peaks) by loading them into Mantid Workbench, which has all the plotting/analysis tools needed. inspectrum does not need its own visualization.
+
+### 2026-03-16: Crystallography module — cryspy building blocks
+
+`src/inspectrum/crystallography.py` uses cryspy's low-level functions:
+
+- **`cryspy.calc_inverse_d_by_hkl_abc_angles(h, k, l, a, b, c, α, β, γ)`** — returns 1/d for given Miller indices and cell params. Angles in **radians**.
+- **`cryspy.get_scat_length_neutron(symbol)`** — returns complex bound coherent neutron scattering length (fm). E.g. W → 0.486, O → 0.5803, H → −0.3739.
+- **`cryspy.get_crystal_system_by_it_number(sg_number)`** — returns crystal system string.
+- **`cryspy.tof_Jorgensen(alpha, beta, sigma, time, time_hkl)`** — TOF peak profile (Ikeda-Carpenter convolved with Gaussian). Available but NOT used in the inspection pipeline (no profile fitting).
+
+Key implementation details:
+- Centering translation vectors (`_CENTERING_VECTORS` dict) applied to structure factor calculation for I, F, C, A, B, R lattices
+- CIF atom site coordinates may contain uncertainty strings (`"0.202(3)"`) — `_parse_cif_number()` strips these
+- Multiplicities computed from Laue class symmetry by enumerating equivalent reflections
+- Reflections merged by d-spacing tolerance to remove duplicates from positive-hkl enumeration
+
+### 2026-03-16: Peak finding module — tuning insights from SNAP data
+
+`src/inspectrum/peakfinding.py` wraps `scipy.signal.find_peaks` with defaults tuned for neutron TOF powder diffraction.
+
+**Auto-threshold strategy**: prominence threshold = std of the lower quartile of the peak signal. After background subtraction, peak-free regions cluster in the lower 25% — their std is a robust noise estimate. On SNAP data: noise σ ≈ 3.7, giving a prominence threshold of ~3.7 counts. This was chosen after testing several strategies:
+- 3 × MAD was too aggressive (MAD=6.8, threshold=20.4 → 0 peaks found) because the residual background pedestal inflates the MAD
+- Lower-quartile σ adapts well to the actual noise floor
+
+**Width filter is the key discriminant**: real diffraction peaks have FWHM ≈ 0.01–0.06 Å (5–30 data points at SNAP resolution). Noise spikes have FWHM < 0.005 Å (1–3 points). The `min_width_pts=5` default effectively separates signal from noise.
+
+**SNAP059056 results**: 9 peaks found (with auto-threshold + width filter). These correspond to tungsten and ice VII reflections. Offsets from ambient CIF d-spacings are 0.02–0.10 Å, consistent with ~3–5% lattice compression under high pressure.
+
+**Diagnostic plotting**: `src/inspectrum/plotting.py` provides `plot_spectrum()`, `plot_background()`, and `plot_peak_markers()` — thin matplotlib wrappers that return `(fig, ax)` for one-liner visual inspection. `plot_peak_markers()` accepts a `PeakTable` directly.
+
+### 2026-03-17: Background edge divergence — fixed with reflect-padding
+
+The original peak-clipping implementation skipped points within `w` of the array edges (`if i < w: continue`). These untouched edge points kept their pre-clipping values, and after inverse-LLS + global normalization they diverged strongly from the real data.
+
+**Fix**: Reflect-pad the working array by `win_size + 1` points on each side before clipping (like `np.pad(mode='reflect')`). This gives full windows at the edges. After clipping, strip the padding. The background now faithfully follows the data to the end points.
+
+### 2026-03-17: Tuned parameters for SNAP high-pressure data
+
+Tuned via `scripts/tune_peaks.py` interactive slider UI:
+- `win_size=4` (was 40): SNAP spectra have structured, gnarly backgrounds that need tight tracking
+- `smoothing=1.0` (was 5.0): less pre-smoothing preserves background features
+- `min_prominence=4.0`: explicit threshold works better than auto for this data
+- `min_width_pts=6` (was 5): slightly wider filter for SNAP resolution
+
+These are stored as defaults in `scripts/tune_peaks.py`. The `estimate_background()` API defaults remain general-purpose (`win_size=40`, `smoothing=5.0`).
