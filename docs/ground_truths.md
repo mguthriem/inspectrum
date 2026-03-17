@@ -152,3 +152,18 @@ Tuned via `scripts/tune_peaks.py` interactive slider UI:
 - `min_width_pts=6` (was 5): slightly wider filter for SNAP resolution
 
 These are stored as defaults in `scripts/tune_peaks.py`. The `estimate_background()` API defaults remain general-purpose (`win_size=40`, `smoothing=5.0`).
+
+### 2026-03-17: Instrument resolution (pdabc) parsing
+
+The instprm `pdabc` block contains 5 columns: d-spacing, TOF, 0, 0, σ_TOF. σ_TOF is the Gaussian sigma in TOF µs measured on NIST strain-free Si. NaN rows at low-d and high-d edges have no calibration data.
+
+**Conversion**: `FWHM_d = 2·√(2·ln2) · σ_TOF / DIFC`
+
+**SNAP Bank 0 resolution** (DIFC=5218.45):
+- d=0.8 Å: FWHM ≈ 0.0045 Å (4.2 pts)
+- d=1.0 Å: FWHM ≈ 0.0079 Å (6.0 pts)
+- d=1.5 Å: FWHM ≈ 0.0174 Å (8.7 pts)
+- d=2.0 Å: FWHM ≈ 0.0228 Å (8.6 pts)
+- d=2.5 Å: FWHM ≈ 0.0307 Å (9.2 pts)
+
+**Key insight**: `recommend_parameters()` derives background/peakfinding params from resolution. The `win_size` recommendation (3× max FWHM) gives 28 — too large for SNAP's structured backgrounds but reasonable for smoother instruments. Manual tuning (win_size=4) is needed for gnarly backgrounds.

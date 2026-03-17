@@ -82,6 +82,8 @@ def find_peaks_in_spectrum(
     min_prominence: float | None = None,
     min_width_pts: int = 5,
     min_distance_pts: int = 3,
+    resolution: tuple[NDArray[np.float64], NDArray[np.float64]] | None = None,
+    max_fwhm_factor: float = 5.0,
 ) -> PeakTable:
     """Find peaks in a background-subtracted spectrum.
 
@@ -100,6 +102,15 @@ def find_peaks_in_spectrum(
             Default 5 points.
         min_distance_pts: Minimum separation between neighbouring
             peaks in data points.  Default 3.
+        resolution: Optional instrument resolution curve as a tuple
+            ``(d_curve, fwhm_curve)`` from
+            :func:`~inspectrum.resolution.parse_resolution_curve`.
+            When provided, peaks whose observed FWHM exceeds
+            *max_fwhm_factor* × the expected instrument FWHM are
+            rejected as unphysical (likely background artefacts).
+        max_fwhm_factor: Maximum ratio of observed FWHM to
+            instrument FWHM.  Only used when *resolution* is
+            provided.  Default 5.0.
 
     Returns:
         :class:`PeakTable` sorted by decreasing d-spacing.
@@ -157,6 +168,20 @@ def find_peaks_in_spectrum(
     # For each peak index, use the local spacing (clamped to valid range)
     local_dx = dx[np.clip(idx, 0, len(dx) - 1)]
     fwhm = widths_pts * local_dx
+
+    # ---- Filter by resolution (reject unphysically wide peaks) ----
+    if resolution is not None:
+        d_curve, fwhm_curve = resolution
+        positions_tmp = x[idx]
+        expected_fwhm = np.interp(positions_tmp, d_curve, fwhm_curve)
+        keep_res = fwhm <= max_fwhm_factor * expected_fwhm
+        idx = idx[keep_res]
+        proms = proms[keep_res]
+        widths_pts = widths_pts[keep_res]
+        fwhm = fwhm[keep_res]
+
+    if len(idx) == 0:
+        return _empty_table()
 
     # ---- Build output arrays ----
     positions = x[idx]
