@@ -99,7 +99,7 @@ def generate_reflections(
 
                 mult = _multiplicity(h, k, l_idx, phase.space_group_number)
                 f_sq = _calc_structure_factor_sq(
-                    h, k, l_idx, d, phase.atom_sites, centering
+                    h, k, l_idx, d, phase,
                 )
 
                 reflections.append({
@@ -295,33 +295,38 @@ def _calc_structure_factor_sq(
     k: int,
     l_val: int,
     d: float,
-    atom_sites: list[dict[str, Any]],
-    centering: str = "P",
+    phase: CrystalPhase,
 ) -> float:
     """Calculate |F(hkl)|² for neutron scattering.
 
-    Uses the kinematic approximation:
+    Uses the kinematic approximation::
+
         F(hkl) = Σ_j  b_j · occ_j · T_j · exp(2πi(h·x_j + k·y_j + l·z_j))
 
-    where b_j is the bound coherent neutron scattering length,
-    occ_j is the site occupancy, and T_j is a simple isotropic
-    Debye-Waller factor (set to 1 if B_iso not provided).
+    where the sum runs over **all** symmetry-equivalent positions in the
+    unit cell (not just the asymmetric unit).
 
-    The atom sites from the CIF are expanded by the lattice centering
-    translations (I, F, C, etc.) to get all centering-equivalent
-    atoms in the unit cell.  Rotational symmetry operations beyond
-    centering are not applied — this is an approximation that works
-    well for simple structures and is adequate for pre-inspection.
+    When the CIF-derived symmetry operations (``phase.symops``) are
+    available, each asymmetric-unit site is expanded to all its
+    equivalent positions using :func:`expand_position`.  This gives
+    correct |F|² for any structure.
+
+    If ``phase.symops`` is empty (legacy path), a centering-only fallback
+    is used — correct only for simple structures where all atoms sit on
+    special positions of maximum symmetry.
     """
-    if not atom_sites:
+    if not phase.atom_sites:
         return 1.0
 
+    sthovl = 0.5 / d  # sin(θ)/λ = 1/(2d)
+    use_symops = len(phase.symops) > 0
+    centering = _extract_centering(phase.space_group)
     centering_vectors = _CENTERING_VECTORS.get(centering, [(0.0, 0.0, 0.0)])
 
     F = 0.0 + 0.0j
-    sthovl = 0.5 / d  # sin(theta)/lambda = 1/(2d)
+    hkl_vec = np.array([h, k, l_val], dtype=float)
 
-    for site in atom_sites:
+    for site in phase.atom_sites:
         symbol = _extract_element(site.get("type_symbol", site.get("label", "")))
         try:
             b = cryspy.get_scat_length_neutron(symbol)
@@ -335,7 +340,6 @@ def _calc_structure_factor_sq(
         z = float(_parse_cif_number(str(site.get("fract_z", 0.0))))
 
         # Isotropic Debye-Waller factor
-        # CIF may store B_iso or U_iso (B = 8π²U)
         b_iso_str = site.get("B_iso_or_equiv", site.get("b_iso_or_equiv", "."))
         u_iso_str = site.get("U_iso_or_equiv", site.get("u_iso_or_equiv", "."))
         b_iso = 0.0
@@ -346,13 +350,21 @@ def _calc_structure_factor_sq(
             b_iso = 8 * np.pi**2 * u_iso
         dw = np.exp(-b_iso * sthovl**2)
 
-        # Sum over centering translations
-        for tx, ty, tz in centering_vectors:
-            xc = x + tx
-            yc = y + ty
-            zc = z + tz
-            phase = 2 * np.pi * (h * xc + k * yc + l_val * zc)
-            F += complex(b) * occ * dw * np.exp(1j * phase)
+        if use_symops:
+            # Full symmetry expansion — correct for all structures
+            pos = np.array([x, y, z])
+            equiv_positions = expand_position(pos, phase.symops)
+            for ep in equiv_positions:
+                phase_angle = 2 * np.pi * np.dot(hkl_vec, ep)
+                F += complex(b) * occ * dw * np.exp(1j * phase_angle)
+        else:
+            # Legacy centering-only fallback
+            for tx, ty, tz in centering_vectors:
+                xc = x + tx
+                yc = y + ty
+                zc = z + tz
+                phase_angle = 2 * np.pi * (h * xc + k * yc + l_val * zc)
+                F += complex(b) * occ * dw * np.exp(1j * phase_angle)
 
     return float(abs(F) ** 2)
 
@@ -403,6 +415,105 @@ _CENTERING_VECTORS: dict[str, list[tuple[float, float, float]]] = {
     "C": [(0.0, 0.0, 0.0), (0.5, 0.5, 0.0)],
     "R": [(0.0, 0.0, 0.0), (2/3, 1/3, 1/3), (1/3, 2/3, 2/3)],
 }
+
+
+def parse_symop(symop_str: str) -> tuple[np.ndarray, np.ndarray]:
+    """Parse a CIF symmetry operation string into rotation + translation.
+
+    Handles standard CIF ``_space_group_symop_operation_xyz`` format,
+    e.g. ``'-y, x+1/2, z+1/2'``.
+
+    Args:
+        symop_str: Symmetry operation as comma-separated xyz expression.
+
+    Returns:
+        Tuple of (3×3 rotation matrix, 3-vector translation), both as
+        numpy arrays.  Rotation is integer-valued (±1, 0), translation
+        is fractional.
+
+    Example:
+        >>> rot, trans = parse_symop('-y, x+1/2, z+1/2')
+        >>> rot   # [[0, -1, 0], [1, 0, 0], [0, 0, 1]]
+        >>> trans  # [0.0, 0.5, 0.5]
+    """
+    rot = np.zeros((3, 3), dtype=float)
+    trans = np.zeros(3, dtype=float)
+    var_map = {"x": 0, "y": 1, "z": 2}
+
+    parts = [p.strip() for p in symop_str.split(",")]
+    for row, part in enumerate(parts):
+        part = part.replace(" ", "")
+        i = 0
+        sign = 1
+        while i < len(part):
+            ch = part[i]
+            if ch == "+":
+                sign = 1
+                i += 1
+            elif ch == "-":
+                sign = -1
+                i += 1
+            elif ch in var_map:
+                rot[row, var_map[ch]] = sign
+                sign = 1  # reset default to positive
+                i += 1
+            elif ch.isdigit():
+                num_str = ch
+                i += 1
+                while i < len(part) and (part[i].isdigit() or part[i] == "/"):
+                    num_str += part[i]
+                    i += 1
+                if "/" in num_str:
+                    num, den = num_str.split("/")
+                    trans[row] += sign * int(num) / int(den)
+                else:
+                    trans[row] += sign * int(num_str)
+                sign = 1
+            else:
+                i += 1
+    return rot, trans
+
+
+def expand_position(
+    pos: np.ndarray,
+    symops: list[tuple[np.ndarray, np.ndarray]],
+    tol: float = 1e-5,
+) -> np.ndarray:
+    """Apply symmetry operations to expand one position to all equivalents.
+
+    Takes a fractional coordinate from the asymmetric unit and applies
+    every symmetry operation, returning the unique positions in [0, 1).
+
+    Args:
+        pos: Fractional coordinate (3-vector).
+        symops: List of (rotation, translation) tuples from
+            :func:`parse_symop`.
+        tol: Tolerance for considering two positions identical.
+
+    Returns:
+        Array of shape (N, 3) with unique equivalent positions.
+    """
+    all_pos = []
+    for rot, trans in symops:
+        new_pos = rot @ pos + trans
+        new_pos = new_pos % 1.0
+        # Snap values very close to 1.0 back to 0.0
+        new_pos[new_pos > 1.0 - tol] = 0.0
+        all_pos.append(new_pos)
+
+    # Deduplicate — O(n²) but n ≤ 192 for even the largest space groups
+    unique = [all_pos[0]]
+    for p in all_pos[1:]:
+        is_dup = False
+        for u in unique:
+            diff = np.abs(p - u)
+            diff = np.minimum(diff, 1.0 - diff)  # periodic boundary
+            if np.all(diff < tol):
+                is_dup = True
+                break
+        if not is_dup:
+            unique.append(p)
+    return np.array(unique)
 
 
 def _merge_equivalent_reflections(

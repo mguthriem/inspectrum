@@ -12,6 +12,7 @@ and crystal structure information from common file formats:
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -22,7 +23,12 @@ from pycifstar import to_data as cif_to_data
 from inspectrum.models import (
     CrystalPhase,
     DiffractionSpectrum,
+    EquationOfState,
+    ExperimentDescription,
     Instrument,
+    PhaseDescription,
+    SampleConditions,
+    SpectrumConditions,
 )
 
 
@@ -464,6 +470,22 @@ def load_cif(filepath: str | Path) -> CrystalPhase:
     if data.is_value("_cell_formula_units_z"):
         cif_metadata["Z"] = data["_cell_formula_units_z"].value
 
+    # Symmetry operations — from _space_group_symop_operation_xyz loop
+    symop_strings: list[str] = []
+    for loop in data.loops:
+        if "_space_group_symop_operation_xyz" in loop.names:
+            symop_strings = list(loop["_space_group_symop_operation_xyz"])
+            break
+    # Fallback: older CIF format uses _symmetry_equiv_pos_as_xyz
+    if not symop_strings:
+        for loop in data.loops:
+            if "_symmetry_equiv_pos_as_xyz" in loop.names:
+                symop_strings = list(loop["_symmetry_equiv_pos_as_xyz"])
+                break
+
+    from inspectrum.crystallography import parse_symop
+    symops = [parse_symop(s) for s in symop_strings]
+
     return CrystalPhase(
         name=name,
         a=a,
@@ -475,5 +497,184 @@ def load_cif(filepath: str | Path) -> CrystalPhase:
         space_group=space_group,
         space_group_number=sg_number,
         atom_sites=atom_sites,
+        symops=symops,
         metadata=cif_metadata,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase description (JSON)
+# ---------------------------------------------------------------------------
+
+_AVOGADRO = 6.02214076e23
+
+
+def _convert_V0_to_A3_per_cell(
+    value: float, unit: str, Z: int,
+) -> float:
+    """Convert V₀ from a published unit to ų per unit cell.
+
+    Args:
+        value: Volume in the published unit.
+        unit: One of ``"A3"`` (per cell), ``"A3/atom"`` (per atom),
+            or ``"cm3/mol"`` (molar volume per formula unit).
+        Z: Number of formula units (or atoms) per unit cell.
+
+    Returns:
+        Volume in ų per unit cell.
+
+    Raises:
+        ValueError: If *unit* is not recognised.
+    """
+    if unit in ("A3", "Å3"):
+        return value
+    if unit == "A3/atom":
+        return value * Z
+    if unit == "cm3/mol":
+        return value * Z * 1e24 / _AVOGADRO
+    raise ValueError(f"Unknown V_0 unit: {unit!r}")
+
+
+def load_phase_descriptions(
+    filepath: str | Path,
+) -> ExperimentDescription:
+    """Load an experiment description from a JSON file.
+
+    The JSON format is human-editable.  See ``tests/test_data/`` for
+    examples.  CIF files referenced in the JSON are loaded automatically
+    relative to the JSON file's directory.
+
+    Volume units in the JSON (``V_0_unit``) are converted to ų per
+    unit cell on load.  Fields ending in ``_err`` are stored in
+    :attr:`EquationOfState.extra`.
+
+    The optional ``global_conditions`` block provides defaults that
+    apply to all spectra (e.g. temperature, max_pressure).  Per-
+    spectrum entries in ``spectrum_conditions`` can override these.
+
+    Args:
+        filepath: Path to the JSON file.
+
+    Returns:
+        ExperimentDescription with phases, global conditions, and
+        per-spectrum conditions.
+
+    Raises:
+        FileNotFoundError: If the JSON file or a referenced CIF is
+            missing.
+        ValueError: If required fields are missing or invalid.
+    """
+    path = Path(filepath)
+    if not path.exists():
+        raise FileNotFoundError(f"Phase description file not found: {path}")
+
+    with open(path) as f:
+        raw = json.load(f)
+
+    if "phases" not in raw:
+        raise ValueError(f"JSON file {path} must contain a 'phases' key")
+
+    base_dir = path.parent
+    descriptions: list[PhaseDescription] = []
+
+    # --- Global conditions (optional) ---
+    global_temp: float | None = None
+    global_max_p: float | None = None
+    if "global_conditions" in raw:
+        gc = raw["global_conditions"]
+        global_temp = gc.get("temperature")
+        global_max_p = gc.get("max_pressure")
+
+    for entry in raw["phases"]:
+        # --- Reference conditions ---
+        ref_cond = SampleConditions()
+        if "reference_conditions" in entry:
+            rc = entry["reference_conditions"]
+            ref_cond = SampleConditions(
+                pressure=rc.get("pressure"),
+                temperature=rc.get("temperature"),
+            )
+
+        # --- Equation of state (optional) ---
+        eos: EquationOfState | None = None
+        if "eos" in entry and entry["eos"] is not None:
+            eos_raw = entry["eos"]
+
+            # Volume conversion
+            V0_raw = eos_raw["V_0"]
+            V0_unit = eos_raw.get("V_0_unit", "A3")
+            Z = eos_raw.get("Z", 1)
+            V0_cell = _convert_V0_to_A3_per_cell(V0_raw, V0_unit, Z)
+
+            # Collect extra/error fields
+            extra: dict[str, float] = {}
+            skip_keys = {
+                "type", "order", "V_0", "V_0_unit", "Z",
+                "K_0", "K_prime", "source",
+            }
+            for k, v in eos_raw.items():
+                if k not in skip_keys and isinstance(v, (int, float)):
+                    extra[k] = float(v)
+
+            eos = EquationOfState(
+                eos_type=eos_raw["type"],
+                order=eos_raw.get("order", 3),
+                V_0=V0_cell,
+                K_0=eos_raw["K_0"],
+                K_prime=eos_raw.get("K_prime", 4.0),
+                source=eos_raw.get("source", ""),
+                extra=extra,
+            )
+
+        # --- Stability range (optional) ---
+        stab = None
+        if "stability_pressure" in entry:
+            sp = entry["stability_pressure"]
+            if sp is not None:
+                stab = (sp[0], sp[1])
+
+        # --- Load CIF ---
+        cif_rel = entry["cif"]
+        cif_path = base_dir / cif_rel
+        phase = load_cif(cif_path)
+
+        desc = PhaseDescription(
+            name=entry.get("name", phase.name),
+            cif_path=str(cif_rel),
+            role=entry.get("role", "sample"),
+            reference_conditions=ref_cond,
+            eos=eos,
+            stability_pressure=stab,
+            phase=phase,
+        )
+        descriptions.append(desc)
+
+    # --- Global data-provenance defaults ---
+    instrument = raw.get("instrument", "")
+    facility = raw.get("facility", "")
+    pgs = raw.get("pixel_grouping_scheme", "all")
+
+    # --- Per-spectrum conditions (optional) ---
+    spec_conds: list[SpectrumConditions] = []
+    for sc_raw in raw.get("spectrum_conditions", []):
+        spec_conds.append(
+            SpectrumConditions(
+                run_number=sc_raw.get("run_number", 0),
+                instrument=sc_raw.get("instrument"),
+                facility=sc_raw.get("facility"),
+                pgs=sc_raw.get("pixel_grouping_scheme"),
+                label=sc_raw.get("label", ""),
+                pressure=sc_raw.get("pressure"),
+                temperature=sc_raw.get("temperature"),
+            )
+        )
+
+    return ExperimentDescription(
+        phases=descriptions,
+        global_temperature=global_temp,
+        global_max_pressure=global_max_p,
+        instrument=instrument,
+        facility=facility,
+        pgs=pgs,
+        spectrum_conditions=spec_conds,
     )

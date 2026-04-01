@@ -154,6 +154,20 @@ class TestSyntheticClean:
             f"FWHM={pt.fwhm[0]:.4f}, expected ≈{expected_fwhm:.4f}"
         )
 
+    def test_centroid_subpixel_accuracy(self):
+        """Centroid should be more accurate than grid spacing."""
+        # Place peak at 1.503 — between grid points
+        centre = 1.503
+        x, y = _synthetic_spectrum(
+            peak_params=[(centre, 50.0, 0.015)],
+            n_points=500,
+        )
+        pt = find_peaks_in_spectrum(x, y, min_width_pts=3)
+        assert pt.n_peaks == 1
+        grid_spacing = (2.5 - 0.8) / 500  # 0.0034
+        # Centroid error should be much less than grid spacing
+        assert abs(pt.positions[0] - centre) < grid_spacing / 2
+
 
 # ---------------------------------------------------------------------------
 # Synthetic spectra — noisy
@@ -237,10 +251,13 @@ class TestEdgeCases:
         assert pt.n_peaks == 2
 
     def test_indices_correspond_to_positions(self):
+        """Centroid positions should be close to the apex positions."""
         x, y = _synthetic_spectrum()
         pt = find_peaks_in_spectrum(x, y)
         for i in range(pt.n_peaks):
-            assert x[pt.indices[i]] == pt.positions[i]
+            # Centroid should be within one local grid spacing of the apex
+            local_dx = abs(x[1] - x[0])
+            assert abs(pt.positions[i] - x[pt.indices[i]]) < local_dx
 
 
 # ---------------------------------------------------------------------------
@@ -271,8 +288,8 @@ class TestSNAPData:
     def test_no_excessive_peaks(self, snap_data):
         x, y = snap_data
         pt = find_peaks_in_spectrum(x, y)
-        # Shouldn't find more than ~20 — would indicate noise leakage
-        assert pt.n_peaks <= 20
+        # With 5σ auto-threshold, real SNAP data should produce ≤10
+        assert pt.n_peaks <= 10
 
     def test_positions_within_data_range(self, snap_data):
         x, y = snap_data

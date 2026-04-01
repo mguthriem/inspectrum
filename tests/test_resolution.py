@@ -212,6 +212,39 @@ class TestRecommendParameters:
 class TestResolutionAwarePeakFinding:
     """Test resolution curve used in peak finding."""
 
+    def test_resolution_filter_rejects_narrow_spikes(self):
+        """Resolution filter rejects peaks narrower than instrument."""
+        from inspectrum.peakfinding import find_peaks_in_spectrum
+
+        # Synthetic: 1 real peak (FWHM~0.01) + 1 spike (FWHM~0.001)
+        x = np.linspace(0.8, 2.5, 2000)
+        y = np.zeros_like(x)
+        # Real peak at d=1.5, sigma=0.004 → FWHM≈0.0094
+        y += 50.0 * np.exp(-0.5 * ((x - 1.5) / 0.004) ** 2)
+        # Narrow spike at d=2.0, sigma=0.0005 → FWHM≈0.0012
+        y += 40.0 * np.exp(-0.5 * ((x - 2.0) / 0.0005) ** 2)
+
+        # Resolution curve: instrument FWHM ≈ 0.01 everywhere
+        d_curve = np.array([0.5, 3.0])
+        fwhm_curve = np.array([0.01, 0.01])
+
+        # Without resolution filter: should find 2 peaks
+        table_nofilter = find_peaks_in_spectrum(
+            x, y, min_prominence=5.0, min_width_pts=1
+        )
+        assert table_nofilter.n_peaks == 2
+
+        # With resolution filter (min 0.75× instrument): only the real peak
+        table_filtered = find_peaks_in_spectrum(
+            x, y,
+            min_prominence=5.0,
+            min_width_pts=1,
+            resolution=(d_curve, fwhm_curve),
+            min_fwhm_factor=0.75,
+        )
+        assert table_filtered.n_peaks == 1
+        assert abs(table_filtered.positions[0] - 1.5) < 0.01
+
     def test_resolution_filter_rejects_wide_artefacts(self):
         """Resolution filter rejects peaks far wider than instrument."""
         from inspectrum.peakfinding import find_peaks_in_spectrum
@@ -261,6 +294,6 @@ class TestResolutionAwarePeakFinding:
             min_width_pts=6,
             resolution=(d_curve, fwhm_curve),
         )
-        # Should find a reasonable number of peaks (5–15)
+        # Should find a reasonable number of peaks (5–10)
         assert table.n_peaks >= 3
-        assert table.n_peaks <= 20
+        assert table.n_peaks <= 15

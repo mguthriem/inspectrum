@@ -12,8 +12,13 @@ from inspectrum.models import (
     CrystalPhase,
     DiffractionDataset,
     DiffractionSpectrum,
+    EquationOfState,
+    ExperimentDescription,
     InspectionResult,
     Instrument,
+    PhaseDescription,
+    SampleConditions,
+    SpectrumConditions,
 )
 
 
@@ -277,3 +282,318 @@ class TestInspectionResult:
         )
         r = repr(result)
         assert "tungsten" in r
+
+
+# ---------------------------------------------------------------------------
+# EquationOfState
+# ---------------------------------------------------------------------------
+
+class TestEquationOfState:
+    """Tests for EquationOfState."""
+
+    def test_create_birch_murnaghan(self):
+        """Test creating a 3rd-order BM EOS with valid parameters."""
+        eos = EquationOfState(
+            eos_type="birch-murnaghan",
+            V_0=40.85,
+            K_0=23.7,
+            K_prime=4.15,
+            source="Hemley et al., Nature 330 (1987)",
+        )
+        assert eos.eos_type == "birch-murnaghan"
+        assert eos.V_0 == pytest.approx(40.85)
+        assert eos.K_0 == pytest.approx(23.7)
+        assert eos.source != ""
+
+    def test_create_vinet(self):
+        """Test creating a Vinet EOS."""
+        eos = EquationOfState(
+            eos_type="vinet",
+            V_0=31.724,
+            K_0=295.2,
+            K_prime=4.32,
+        )
+        assert eos.eos_type == "vinet"
+
+    def test_invalid_eos_type_raises_error(self):
+        """Test that an unsupported EOS type raises ValueError."""
+        with pytest.raises(ValueError, match="eos_type"):
+            EquationOfState(eos_type="unknown", V_0=10.0, K_0=100.0)
+
+    def test_non_positive_V0_raises_error(self):
+        """Test that V₀ ≤ 0 raises ValueError."""
+        with pytest.raises(ValueError, match="V_0"):
+            EquationOfState(V_0=0.0, K_0=100.0)
+
+    def test_non_positive_K0_raises_error(self):
+        """Test that K₀ ≤ 0 raises ValueError."""
+        with pytest.raises(ValueError, match="K_0"):
+            EquationOfState(V_0=30.0, K_0=-1.0)
+
+    def test_extra_stores_uncertainties(self):
+        """Test that extra dict stores error values."""
+        eos = EquationOfState(
+            V_0=31.724,
+            K_0=295.2,
+            extra={"K_0_err": 3.9, "K_prime_err": 0.11},
+        )
+        assert eos.extra["K_0_err"] == pytest.approx(3.9)
+
+    def test_repr_readable(self):
+        """Test repr includes key parameters."""
+        eos = EquationOfState(V_0=31.724, K_0=295.2, K_prime=4.32)
+        r = repr(eos)
+        assert "295.2" in r
+        assert "birch-murnaghan" in r
+
+
+# ---------------------------------------------------------------------------
+# SampleConditions
+# ---------------------------------------------------------------------------
+
+class TestSampleConditions:
+    """Tests for SampleConditions."""
+
+    def test_defaults_are_none(self):
+        """Test that defaults represent ambient/unknown."""
+        cond = SampleConditions()
+        assert cond.pressure is None
+        assert cond.temperature is None
+
+    def test_with_pressure_and_temperature(self):
+        """Test creating conditions with both values."""
+        cond = SampleConditions(pressure=3.5, temperature=300)
+        assert cond.pressure == pytest.approx(3.5)
+        assert cond.temperature == pytest.approx(300)
+
+    def test_repr_ambient(self):
+        """Test repr for unknown conditions."""
+        assert "ambient" in repr(SampleConditions())
+
+    def test_repr_with_pressure(self):
+        """Test repr includes pressure when set."""
+        cond = SampleConditions(pressure=5.0)
+        assert "5.0 GPa" in repr(cond)
+
+
+# ---------------------------------------------------------------------------
+# PhaseDescription
+# ---------------------------------------------------------------------------
+
+class TestPhaseDescription:
+    """Tests for PhaseDescription."""
+
+    def test_create_minimal(self):
+        """Test creating a description with just a name."""
+        desc = PhaseDescription(name="tungsten", cif_path="w.cif")
+        assert desc.role == "sample"
+        assert desc.eos is None
+        assert desc.phase is None
+
+    def test_calibrant_role(self):
+        """Test creating a calibrant phase."""
+        desc = PhaseDescription(name="tungsten", role="calibrant")
+        assert desc.role == "calibrant"
+
+    def test_invalid_role_raises_error(self):
+        """Test that invalid role raises ValueError."""
+        with pytest.raises(ValueError, match="role"):
+            PhaseDescription(role="unknown")
+
+    def test_is_stable_at_no_constraint(self):
+        """Test stability check with no pressure range set."""
+        desc = PhaseDescription(name="W")
+        assert desc.is_stable_at(100.0) is True
+        assert desc.is_stable_at(None) is True
+
+    def test_is_stable_at_within_range(self):
+        """Test stability check within defined range."""
+        desc = PhaseDescription(
+            name="ice-VII",
+            stability_pressure=(2.1, 40.0),
+        )
+        assert desc.is_stable_at(5.0) is True
+        assert desc.is_stable_at(1.0) is False
+        assert desc.is_stable_at(50.0) is False
+
+    def test_is_stable_at_open_ended(self):
+        """Test stability with open-ended range (None upper bound)."""
+        desc = PhaseDescription(
+            name="ice-VII",
+            stability_pressure=(2.1, None),
+        )
+        assert desc.is_stable_at(100.0) is True
+        assert desc.is_stable_at(1.0) is False
+
+    def test_is_stable_at_unknown_pressure(self):
+        """Test that unknown pressure always returns True."""
+        desc = PhaseDescription(
+            name="ice-VII",
+            stability_pressure=(2.1, None),
+        )
+        assert desc.is_stable_at(None) is True
+
+    def test_repr_shows_eos_type(self):
+        """Test repr includes EOS type when present."""
+        desc = PhaseDescription(
+            name="W",
+            eos=EquationOfState(
+                eos_type="vinet", V_0=31.7, K_0=295.2,
+            ),
+        )
+        assert "vinet" in repr(desc)
+
+
+# ---------------------------------------------------------------------------
+# SpectrumConditions
+# ---------------------------------------------------------------------------
+
+class TestSpectrumConditions:
+    """Tests for SpectrumConditions."""
+
+    def test_create_with_label(self):
+        """Test creating per-spectrum conditions."""
+        sc = SpectrumConditions(label="SNAP059056", pressure=3.5)
+        assert sc.label == "SNAP059056"
+        assert sc.pressure == pytest.approx(3.5)
+        assert sc.temperature is None
+
+    def test_create_with_run_number(self):
+        """Test creating conditions with run_number and instrument."""
+        sc = SpectrumConditions(
+            run_number=59056, instrument="SNAP", facility="SNS", pgs="all",
+        )
+        assert sc.run_number == 59056
+        assert sc.instrument == "SNAP"
+        assert sc.facility == "SNS"
+        assert sc.pgs == "all"
+
+    def test_resolved_label_from_run_number(self):
+        """Test label is derived from instrument + run_number."""
+        sc = SpectrumConditions(run_number=59056, instrument="SNAP")
+        assert sc.resolved_label() == "SNAP059056"
+
+    def test_resolved_label_from_global_instrument(self):
+        """Test label uses default_instrument when per-entry is None."""
+        sc = SpectrumConditions(run_number=59056)
+        assert sc.resolved_label(default_instrument="SNAP") == "SNAP059056"
+
+    def test_resolved_label_prefers_explicit(self):
+        """Test explicit label takes precedence."""
+        sc = SpectrumConditions(label="CUSTOM", run_number=59056, instrument="SNAP")
+        assert sc.resolved_label() == "CUSTOM"
+
+    def test_repr_shows_label(self):
+        """Test repr includes label."""
+        sc = SpectrumConditions(label="RUN001")
+        assert "RUN001" in repr(sc)
+
+    def test_repr_shows_run_number(self):
+        """Test repr shows run number when no label."""
+        sc = SpectrumConditions(run_number=59056)
+        assert "59056" in repr(sc)
+
+
+# ---------------------------------------------------------------------------
+# ExperimentDescription
+# ---------------------------------------------------------------------------
+
+class TestExperimentDescription:
+    """Tests for ExperimentDescription."""
+
+    def _make_experiment(self) -> ExperimentDescription:
+        """Helper: build an experiment with two phases and conditions."""
+        w = PhaseDescription(name="tungsten", role="calibrant")
+        ice = PhaseDescription(
+            name="ice-VII",
+            stability_pressure=(2.1, None),
+        )
+        return ExperimentDescription(
+            phases=[w, ice],
+            global_temperature=295,
+            global_max_pressure=10.0,
+            instrument="SNAP",
+            facility="SNS",
+            pgs="all",
+            spectrum_conditions=[
+                SpectrumConditions(run_number=1, label="RUN1", pressure=5.0),
+                SpectrumConditions(run_number=2, label="RUN2"),
+            ],
+        )
+
+    def test_create_empty(self):
+        """Test creating an empty experiment."""
+        exp = ExperimentDescription()
+        assert exp.phases == []
+        assert exp.global_temperature is None
+        assert exp.global_max_pressure is None
+
+    def test_conditions_for_known_label(self):
+        """Test conditions_for returns per-spectrum pressure + global T."""
+        exp = self._make_experiment()
+        cond = exp.conditions_for("RUN1")
+        assert cond.pressure == pytest.approx(5.0)
+        assert cond.temperature == pytest.approx(295)
+
+    def test_conditions_for_label_without_pressure(self):
+        """Test conditions_for inherits global T, pressure stays None."""
+        exp = self._make_experiment()
+        cond = exp.conditions_for("RUN2")
+        assert cond.pressure is None
+        assert cond.temperature == pytest.approx(295)
+
+    def test_conditions_for_unknown_label(self):
+        """Test conditions_for falls back to globals for unknown label."""
+        exp = self._make_experiment()
+        cond = exp.conditions_for("UNKNOWN")
+        assert cond.pressure is None
+        assert cond.temperature == pytest.approx(295)
+
+    def test_active_phases_at_low_pressure(self):
+        """Test that ice VII is excluded below 2.1 GPa."""
+        exp = self._make_experiment()
+        active = exp.active_phases_at(1.0)
+        names = [p.name for p in active]
+        assert "tungsten" in names
+        assert "ice-VII" not in names
+
+    def test_active_phases_at_high_pressure(self):
+        """Test that both phases are present above 2.1 GPa."""
+        exp = self._make_experiment()
+        active = exp.active_phases_at(5.0)
+        assert len(active) == 2
+
+    def test_active_phases_at_none(self):
+        """Test that unknown pressure returns all phases."""
+        exp = self._make_experiment()
+        active = exp.active_phases_at(None)
+        assert len(active) == 2
+
+    def test_repr_readable(self):
+        """Test repr includes phase names and conditions."""
+        exp = self._make_experiment()
+        r = repr(exp)
+        assert "tungsten" in r
+        assert "295" in r
+        assert "10.0" in r
+        assert "SNAP" in r
+
+    def test_global_instrument_and_facility(self):
+        """Test global instrument/facility/pgs are stored."""
+        exp = self._make_experiment()
+        assert exp.instrument == "SNAP"
+        assert exp.facility == "SNS"
+        assert exp.pgs == "all"
+
+    def test_conditions_for_uses_resolved_label(self):
+        """Test conditions_for matches via resolved_label."""
+        exp = ExperimentDescription(
+            global_temperature=300,
+            instrument="SNAP",
+            spectrum_conditions=[
+                SpectrumConditions(run_number=59056, pressure=5.0),
+            ],
+        )
+        cond = exp.conditions_for("SNAP059056")
+        assert cond.pressure == pytest.approx(5.0)
+        assert cond.temperature == pytest.approx(300)

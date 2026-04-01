@@ -38,6 +38,10 @@ from scipy.signal import find_peaks, peak_prominences, peak_widths
 # Result container
 # ---------------------------------------------------------------------------
 
+# TODO: Create an ObservedPeak class to hold per-peak data including
+# centroid position, FWHM, height, prominence, and (once Rietveld
+# matching is implemented) assigned (h,k,l) indices.
+
 
 @dataclass
 class PeakTable:
@@ -47,7 +51,8 @@ class PeakTable:
     d-spacing (lowest-angle first, matching reflection list order).
 
     Attributes:
-        positions: d-spacing (Å) of each peak centre.
+        positions: d-spacing (Å) of each peak centre, computed as the
+            intensity-weighted centroid within the half-max boundaries.
         heights: Intensity at each peak apex.
         prominences: Prominence of each peak (height above surrounding
             baseline — a robust measure of peak significance).
@@ -80,10 +85,12 @@ def find_peaks_in_spectrum(
     y: NDArray[np.float64],
     *,
     min_prominence: float | None = None,
+    noise_sigma_factor: float = 5.0,
     min_width_pts: int = 5,
     min_distance_pts: int = 3,
     resolution: tuple[NDArray[np.float64], NDArray[np.float64]] | None = None,
     max_fwhm_factor: float = 5.0,
+    min_fwhm_factor: float = 0.75,
 ) -> PeakTable:
     """Find peaks in a background-subtracted spectrum.
 
@@ -94,9 +101,12 @@ def find_peaks_in_spectrum(
             Same length as *x*.
         min_prominence: Minimum peak prominence (absolute).  Peaks
             below this are rejected.  If ``None`` (default), a
-            threshold is estimated automatically as the standard
-            deviation of the lower quartile of *y* — a robust
-            measure of counting noise that ignores peaks.
+            threshold is estimated automatically as
+            *noise_sigma_factor* × the standard deviation of the
+            lower quartile of *y*.
+        noise_sigma_factor: Multiplier for the automatic prominence
+            threshold.  Only used when *min_prominence* is ``None``.
+            Default 5.0 (≈ 5 σ above the counting-noise floor).
         min_width_pts: Minimum full-width at half-maximum in data
             points.  Rejects noise spikes narrower than this.
             Default 5 points.
@@ -105,12 +115,17 @@ def find_peaks_in_spectrum(
         resolution: Optional instrument resolution curve as a tuple
             ``(d_curve, fwhm_curve)`` from
             :func:`~inspectrum.resolution.parse_resolution_curve`.
-            When provided, peaks whose observed FWHM exceeds
-            *max_fwhm_factor* × the expected instrument FWHM are
-            rejected as unphysical (likely background artefacts).
+            When provided, peaks are checked against the expected
+            instrument FWHM in both directions: too-wide peaks
+            (> *max_fwhm_factor* ×) and too-narrow peaks
+            (< *min_fwhm_factor* ×) are rejected.
         max_fwhm_factor: Maximum ratio of observed FWHM to
             instrument FWHM.  Only used when *resolution* is
             provided.  Default 5.0.
+        min_fwhm_factor: Minimum ratio of observed FWHM to
+            instrument FWHM.  Peaks narrower than this are
+            rejected as sub-resolution noise spikes.  Only used
+            when *resolution* is provided.  Default 0.75.
 
     Returns:
         :class:`PeakTable` sorted by decreasing d-spacing.
@@ -132,12 +147,13 @@ def find_peaks_in_spectrum(
     # Auto-threshold: noise σ from the lower quartile of the signal.
     # After background subtraction, peak-free regions cluster in the
     # lower quartile.  Their standard deviation is a robust estimate
-    # of the counting-noise floor.
+    # of the counting-noise floor.  We multiply by noise_sigma_factor
+    # (default 5) so that only peaks well above the noise survive.
     if min_prominence is None:
         q25 = float(np.percentile(y_work, 25))
         lower_quarter = y_work[y_work <= q25]
         noise_sigma = float(np.std(lower_quarter)) if len(lower_quarter) > 1 else 1.0
-        min_prominence = max(noise_sigma, 1e-10)
+        min_prominence = max(noise_sigma_factor * noise_sigma, 1e-10)
 
     # ---- Find candidate peaks ----
     idx, _ = find_peaks(
@@ -151,13 +167,15 @@ def find_peaks_in_spectrum(
 
     # ---- Compute properties ----
     proms, _, _ = peak_prominences(y_work, idx)
-    widths_pts, _, _, _ = peak_widths(y_work, idx, rel_height=0.5)
+    widths_pts, _, left_ips, right_ips = peak_widths(y_work, idx, rel_height=0.5)
 
     # ---- Filter by width ----
     keep = widths_pts >= min_width_pts
     idx = idx[keep]
     proms = proms[keep]
     widths_pts = widths_pts[keep]
+    left_ips = left_ips[keep]
+    right_ips = right_ips[keep]
 
     if len(idx) == 0:
         return _empty_table()
@@ -169,22 +187,29 @@ def find_peaks_in_spectrum(
     local_dx = dx[np.clip(idx, 0, len(dx) - 1)]
     fwhm = widths_pts * local_dx
 
-    # ---- Filter by resolution (reject unphysically wide peaks) ----
+    # ---- Filter by resolution ----
+    # Reject peaks that are unphysically wide (background artefacts)
+    # or unphysically narrow (sub-resolution noise spikes).
     if resolution is not None:
         d_curve, fwhm_curve = resolution
         positions_tmp = x[idx]
         expected_fwhm = np.interp(positions_tmp, d_curve, fwhm_curve)
-        keep_res = fwhm <= max_fwhm_factor * expected_fwhm
+        keep_res = (
+            (fwhm <= max_fwhm_factor * expected_fwhm)
+            & (fwhm >= min_fwhm_factor * expected_fwhm)
+        )
         idx = idx[keep_res]
         proms = proms[keep_res]
         widths_pts = widths_pts[keep_res]
         fwhm = fwhm[keep_res]
+        left_ips = left_ips[keep_res]
+        right_ips = right_ips[keep_res]
 
     if len(idx) == 0:
         return _empty_table()
 
-    # ---- Build output arrays ----
-    positions = x[idx]
+    # ---- Compute center-of-mass positions ----
+    positions = _centroid_positions(x, y_work, left_ips, right_ips)
     heights = y_work[idx]
 
     # Sort by decreasing d-spacing (to match reflection list convention)
@@ -201,6 +226,47 @@ def find_peaks_in_spectrum(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _centroid_positions(
+    x: NDArray[np.float64],
+    y: NDArray[np.float64],
+    left_ips: NDArray[np.float64],
+    right_ips: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """Compute intensity-weighted centroid for each peak.
+
+    Uses the half-max boundaries from ``peak_widths`` to define the
+    integration window.  Only positive-intensity points contribute,
+    preventing noise in the tails from pulling the centroid off-centre.
+
+    Args:
+        x: d-spacing array.
+        y: Background-subtracted intensity.
+        left_ips: Left half-max crossing (fractional index) per peak.
+        right_ips: Right half-max crossing (fractional index) per peak.
+
+    Returns:
+        Array of centroid d-spacings, one per peak.
+    """
+    centroids = np.empty(len(left_ips), dtype=np.float64)
+
+    for i in range(len(left_ips)):
+        lo = max(0, int(np.floor(left_ips[i])))
+        hi = min(len(x), int(np.ceil(right_ips[i])) + 1)
+
+        x_win = x[lo:hi]
+        y_win = y[lo:hi]
+
+        # Only positive intensities contribute to the centroid
+        mask = y_win > 0
+        if np.any(mask):
+            centroids[i] = np.sum(x_win[mask] * y_win[mask]) / np.sum(y_win[mask])
+        else:
+            # Fallback to apex position
+            centroids[i] = x_win[len(x_win) // 2]
+
+    return centroids
 
 
 def _empty_table() -> PeakTable:

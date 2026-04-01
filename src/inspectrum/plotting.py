@@ -18,10 +18,12 @@ use a consistent colour scheme:
 - orange: estimated background
 - green:  peak-only signal
 - red:    calculated/expected tick marks
+- mixed:  per-phase matched ticks in score order
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -30,6 +32,8 @@ from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 from numpy.typing import NDArray
 
+from inspectrum.lattice import LatticeRefinementResult
+from inspectrum.matching import MatchResult
 from inspectrum.models import DiffractionSpectrum
 from inspectrum.peakfinding import PeakTable
 
@@ -133,11 +137,18 @@ def plot_peak_markers(
                   colors="C3", linewidth=0.8, label="calc d")
 
     if observed_positions is not None:
-        obs_d = (
-            observed_positions.positions
-            if isinstance(observed_positions, PeakTable)
-            else observed_positions
-        )
+        if isinstance(observed_positions, PeakTable):
+            obs_d = observed_positions.positions
+            obs_fwhm = observed_positions.fwhm
+            # Horizontal bars showing FWHM at 10% of y_max
+            bar_y = y_max * 0.08
+            ax.hlines(
+                [bar_y] * len(obs_d),
+                obs_d - obs_fwhm / 2, obs_d + obs_fwhm / 2,
+                colors="C0", linewidth=1.5, alpha=0.6, label="obs FWHM",
+            )
+        else:
+            obs_d = observed_positions
         ax.vlines(obs_d, ymin=0, ymax=y_max * 0.15,
                   colors="C0", linewidth=0.8, label="obs peaks")
 
@@ -146,6 +157,357 @@ def plot_peak_markers(
     ax.set_title(title or f"{spectrum.label or 'Spectrum'} — peak markers")
     ax.legend(fontsize="small")
     return fig, ax
+
+
+def build_match_table(
+    obs_d: NDArray[np.float64],
+    match_result: MatchResult,
+    *,
+    precision: int = 5,
+    blank: str = "",
+) -> tuple[list[str], list[list[str]]]:
+    """Build a row-aligned phase-match table.
+
+    Each row corresponds to one observed peak.  Phase columns contain
+    the matched strained d-spacing for that observed peak, or ``blank``
+    if that phase did not claim the peak.
+
+    Args:
+        obs_d: Observed peak d-spacings in the same order used for
+            matching.
+        match_result: Match result from :mod:`inspectrum.matching`.
+        precision: Decimal places for formatted d-spacings.
+        blank: Placeholder for unmatched cells.
+
+    Returns:
+        Tuple ``(headers, rows)`` where headers is a list of column
+        names and rows is a list of string rows.
+    """
+    headers = ["observed_d"] + [pm.phase_name for pm in match_result.phase_matches]
+    phase_maps = [
+        {mp.obs_idx: mp.strained_d for mp in pm.matched_peaks}
+        for pm in match_result.phase_matches
+    ]
+
+    rows: list[list[str]] = []
+    for obs_idx, obs_val in enumerate(obs_d):
+        row = [f"{float(obs_val):.{precision}f}"]
+        for phase_map in phase_maps:
+            strained_d = phase_map.get(obs_idx)
+            if strained_d is None:
+                row.append(blank)
+            else:
+                row.append(f"{float(strained_d):.{precision}f}")
+        rows.append(row)
+
+    return headers, rows
+
+
+def format_match_table(
+    obs_d: NDArray[np.float64],
+    match_result: MatchResult,
+    *,
+    precision: int = 5,
+    blank: str = "",
+) -> str:
+    """Format a phase-match table as aligned plain text.
+
+    Args:
+        obs_d: Observed peak d-spacings in the same order used for
+            matching.
+        match_result: Match result to render.
+        precision: Decimal places for formatted d-spacings.
+        blank: Placeholder for unmatched cells.
+
+    Returns:
+        Plain-text table suitable for console output.
+    """
+    headers, rows = build_match_table(
+        obs_d, match_result, precision=precision, blank=blank,
+    )
+    widths = [len(h) for h in headers]
+    for row in rows:
+        for i, value in enumerate(row):
+            widths[i] = max(widths[i], len(value))
+
+    def _fmt_row(values: Sequence[str]) -> str:
+        return " | ".join(value.ljust(widths[i]) for i, value in enumerate(values))
+
+    divider = "-+-".join("-" * width for width in widths)
+    lines = [_fmt_row(headers), divider]
+    lines.extend(_fmt_row(row) for row in rows)
+    return "\n".join(lines)
+
+
+def summarize_phase_matches(
+    spectrum: DiffractionSpectrum,
+    peaks: NDArray[np.float64],
+    match_result: MatchResult,
+    *,
+    observed_positions: NDArray[np.float64] | PeakTable,
+    phase_reflections: dict[str, list[dict[str, Any]]] | None = None,
+    refinements: list[LatticeRefinementResult] | None = None,
+    title: str | None = None,
+    precision: int = 5,
+    blank: str = "",
+    ax: Axes | None = None,
+) -> tuple[Figure, Axes, str]:
+    """Return the plot and formatted table for a phase-matching result.
+
+    This is the main UI-facing helper for reviewing fit quality. It
+    generates the overlay figure and a row-aligned text table in one
+    call so callers do not have to keep the plotting and formatting
+    logic in sync.
+
+    Args:
+        spectrum: Spectrum used for the x-axis and labels.
+        peaks: Background-subtracted peak signal.
+        match_result: Match result to visualise.
+        observed_positions: Observed peak positions or full peak table.
+        phase_reflections: Optional per-phase reflection lists for
+            showing all expected strained ticks.
+        title: Optional plot title override.
+        precision: Decimal places for formatted d-spacings.
+        blank: Placeholder for unmatched cells in the table.
+        ax: Existing axes to draw on.
+
+    Returns:
+        Tuple ``(fig, ax, table_text)``.
+    """
+    fig, ax = plot_phase_matches(
+        spectrum,
+        peaks,
+        match_result,
+        observed_positions=observed_positions,
+        phase_reflections=phase_reflections,
+        refinements=refinements,
+        title=title,
+        ax=ax,
+    )
+    obs_d = (
+        observed_positions.positions
+        if isinstance(observed_positions, PeakTable)
+        else observed_positions
+    )
+    table_text = format_match_table(
+        obs_d,
+        match_result,
+        precision=precision,
+        blank=blank,
+    )
+    return fig, ax, table_text
+
+
+def plot_phase_matches(
+    spectrum: DiffractionSpectrum,
+    peaks: NDArray[np.float64],
+    match_result: MatchResult,
+    *,
+    observed_positions: NDArray[np.float64] | PeakTable | None = None,
+    phase_reflections: dict[str, list[dict[str, Any]]] | None = None,
+    refinements: list[LatticeRefinementResult] | None = None,
+    title: str | None = None,
+    ax: Axes | None = None,
+) -> tuple[Figure, Axes]:
+    """Plot matched phase tick marks on top of the peak-only signal.
+
+    Observed peaks are drawn near the bottom of the plot.  Each phase
+    gets its own coloured tick band near the top, using the strained
+    d-spacings from ``match_result``.
+
+    Args:
+        spectrum: Spectrum providing x-axis, labels, and plot title.
+        peaks: Background-subtracted peak signal.
+        match_result: Phase-match result to visualise.
+        observed_positions: Observed peak positions or full peak table.
+        phase_reflections: Optional per-phase reflection lists. When
+            provided, all strained reflection positions are drawn in a
+            faint style and the matched subset is overlaid more strongly.
+        refinements: Optional per-phase lattice refinement results.
+            When provided, legend labels and an annotation box show
+            refined lattice parameters and EOS-derived pressures.
+        title: Optional plot title override.
+        ax: Existing axes to draw on.
+
+    Returns:
+        ``(fig, ax)`` tuple.
+    """
+    fig, ax = _get_fig_ax(ax)
+    ax.plot(spectrum.x, peaks, linewidth=0.5, color="C2", label="peaks")
+
+    y_max = float(np.max(peaks)) if len(peaks) > 0 else 1.0
+
+    # Build name->refinement lookup
+    ref_by_name: dict[str, LatticeRefinementResult] = {}
+    if refinements is not None:
+        ref_by_name = {r.phase_name: r for r in refinements}
+
+    if observed_positions is not None:
+        if isinstance(observed_positions, PeakTable):
+            obs_d = observed_positions.positions
+            obs_fwhm = observed_positions.fwhm
+            bar_y = y_max * 0.08
+            ax.hlines(
+                [bar_y] * len(obs_d),
+                obs_d - obs_fwhm / 2, obs_d + obs_fwhm / 2,
+                colors="C0", linewidth=1.5, alpha=0.6, label="obs FWHM",
+            )
+        else:
+            obs_d = observed_positions
+        ax.vlines(
+            obs_d, ymin=0, ymax=y_max * 0.15,
+            colors="C0", linewidth=0.8, alpha=0.9, label="obs peaks",
+        )
+
+    n_phases = max(len(match_result.phase_matches), 1)
+    top = 0.98
+    bottom = 0.62
+    band_height = (top - bottom) / n_phases
+    phase_colors = [f"C{i}" for i in range(3, 10)]
+
+    for phase_idx, phase_match in enumerate(match_result.phase_matches):
+        y0 = y_max * (top - (phase_idx + 1) * band_height)
+        y1 = y0 + y_max * band_height * 0.7
+        color = phase_colors[phase_idx % len(phase_colors)]
+        refs = None
+        if phase_reflections is not None:
+            refs = phase_reflections.get(phase_match.phase_name)
+
+        if refs:
+            ref = ref_by_name.get(phase_match.phase_name)
+            if ref is not None and ref.success:
+                all_positions = np.array(
+                    [ref.d_spacing(*tuple(int(x) for x in r["hkl"])) for r in refs],
+                    dtype=np.float64,
+                )
+            else:
+                all_positions = np.array(
+                    [phase_match.strain * float(r["d"]) for r in refs],
+                    dtype=np.float64,
+                )
+            ax.vlines(
+                all_positions,
+                ymin=y0,
+                ymax=y1,
+                colors=color,
+                linewidth=0.9,
+                alpha=0.25,
+            )
+
+        ref = ref_by_name.get(phase_match.phase_name)
+        if ref is not None and ref.success:
+            phase_positions = np.array(
+                [ref.d_spacing(*mp.hkl) for mp in phase_match.matched_peaks],
+                dtype=np.float64,
+            )
+        else:
+            phase_positions = np.array(
+                [mp.strained_d for mp in phase_match.matched_peaks],
+                dtype=np.float64,
+            )
+        if len(phase_positions) == 0:
+            continue
+
+        if ref is not None and ref.success:
+            if ref.crystal_system == "cubic":
+                params = f"a={ref.a:.4f}"
+            elif ref.crystal_system in ("tetragonal", "hexagonal", "trigonal"):
+                params = f"a={ref.a:.4f}, c={ref.c:.4f}"
+            else:
+                params = f"a={ref.a:.4f}, b={ref.b:.4f}, c={ref.c:.4f}"
+            p_str = f", P={ref.pressure_gpa:.1f} GPa" if ref.pressure_gpa is not None else ""
+            lbl = f"{phase_match.phase_name} ({params}{p_str}, n={phase_match.n_matched})"
+        else:
+            lbl = (
+                f"{phase_match.phase_name} "
+                f"(s={phase_match.strain:.4f}, n={phase_match.n_matched})"
+            )
+
+        ax.vlines(
+            phase_positions, ymin=y0, ymax=y1,
+            colors=color, linewidth=1.8,
+            label=lbl,
+        )
+
+    ax.set_xlabel(spectrum.x_unit)
+    ax.set_ylabel(spectrum.y_unit)
+    ax.set_title(title or f"{spectrum.label or 'Spectrum'} — phase matches")
+    ax.legend(fontsize="small")
+
+    # Annotation box with refinement summary
+    if ref_by_name:
+        lines = []
+        for r in (refinements or []):
+            if not r.success:
+                continue
+            p_str = f"  P = {r.pressure_gpa:.2f} GPa" if r.pressure_gpa is not None else ""
+            if r.crystal_system == "cubic":
+                lines.append(f"{r.phase_name}: a={r.a:.5f} \u00c5, V={r.volume:.2f} \u00c5\u00b3{p_str}")
+            elif r.crystal_system in ("tetragonal", "hexagonal", "trigonal"):
+                lines.append(f"{r.phase_name}: a={r.a:.5f}, c={r.c:.5f} \u00c5, V={r.volume:.2f} \u00c5\u00b3{p_str}")
+            else:
+                lines.append(f"{r.phase_name}: a={r.a:.4f}, b={r.b:.4f}, c={r.c:.4f} \u00c5{p_str}")
+        if lines:
+            ax.text(
+                0.02, 0.97, "\n".join(lines),
+                transform=ax.transAxes, fontsize=7,
+                verticalalignment="top",
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="wheat", alpha=0.7),
+            )
+
+    return fig, ax
+
+
+def inspect_phase_matches(
+    spectrum: DiffractionSpectrum,
+    peaks: NDArray[np.float64],
+    match_result: MatchResult,
+    *,
+    observed_positions: NDArray[np.float64] | PeakTable,
+    phase_reflections: dict[str, list[dict[str, Any]]] | None = None,
+    refinements: list[LatticeRefinementResult] | None = None,
+    title: str | None = None,
+    precision: int = 5,
+    blank: str = "-",
+    show: bool = True,
+) -> tuple[Figure, Axes, str]:
+    """Open an interactive phase-match inspection view and print a table.
+
+    This mirrors :func:`inspect_peaks` for the match-review stage. It
+    opens the overlay figure, prints the formatted match table to the
+    console, and returns both the figure and table for further use.
+
+    Args:
+        spectrum: Spectrum used for plotting.
+        peaks: Background-subtracted peak signal.
+        match_result: Match result to review.
+        observed_positions: Observed peak positions or full peak table.
+        phase_reflections: Optional per-phase reflection lists for
+            showing all expected strained ticks.
+        title: Optional plot title override.
+        precision: Decimal places for formatted d-spacings.
+        blank: Placeholder for unmatched cells in the table.
+        show: Whether to open the matplotlib window.
+
+    Returns:
+        Tuple ``(fig, ax, table_text)``.
+    """
+    fig, ax, table_text = summarize_phase_matches(
+        spectrum,
+        peaks,
+        match_result,
+        observed_positions=observed_positions,
+        phase_reflections=phase_reflections,
+        refinements=refinements,
+        title=title,
+        precision=precision,
+        blank=blank,
+    )
+    if show:
+        plt.show(block=False)
+    print("\nMatch table:")
+    print(table_text)
+    return fig, ax, table_text
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +630,15 @@ def inspect_peaks(
             peak_table.positions, peak_table.heights,
             "v", color="C3", markersize=5,
         )
+        # FWHM error-bar style: horizontal bars with end caps at half-max
+        half_heights = peak_table.heights / 2.0
+        ax3.errorbar(
+            peak_table.positions, half_heights,
+            xerr=peak_table.fwhm / 2,
+            fmt="none", ecolor="k", elinewidth=1.5,
+            capsize=4, capthick=1.5, alpha=0.8,
+            label="FWHM",
+        )
     ax3.set_xlabel(spectrum.x_unit)
     ax3.set_ylabel(spectrum.y_unit)
     ax3.set_title("Detected peaks")
@@ -293,7 +664,9 @@ def inspect_peaks(
         print(
             f"  d = {peak_table.positions[i]:.4f} Å   "
             f"height = {peak_table.heights[i]:.1f}   "
-            f"FWHM = {peak_table.fwhm[i]:.4f} Å"
+            f"FWHM = {peak_table.fwhm[i]:.4f} Å   "
+            f"Δ(apex→centroid) = "
+            f"{peak_table.positions[i] - spectrum.x[peak_table.indices[i]]:.5f} Å"
         )
     print(f"{'─' * 50}\n")
 

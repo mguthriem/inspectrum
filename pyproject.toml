@@ -87,6 +87,7 @@ pandas = ">=2.0.0,<3"
 [tool.pixi.tasks]
 test = "pytest -v tests/"
 inspect = { cmd = "python -c \"from inspectrum.loaders import load_mantid_csv; from inspectrum.plotting import inspect_peaks; s = load_mantid_csv('$1')[0]; inspect_peaks(s); import matplotlib.pyplot as plt; plt.show()\"", description = "Interactive peak inspection: pixi run inspect <csv_file>" }
+inspect-matches = { cmd = "python scripts/debug_pressure_sweep.py", description = "Pressure-sweep match inspection with overlay plot and table output" }
 
 # Development tools
 [tool.pixi.feature.dev.dependencies]

@@ -167,3 +167,175 @@ The instprm `pdabc` block contains 5 columns: d-spacing, TOF, 0, 0, σ_TOF. σ_T
 - d=2.5 Å: FWHM ≈ 0.0307 Å (9.2 pts)
 
 **Key insight**: `recommend_parameters()` derives background/peakfinding params from resolution. The `win_size` recommendation (3× max FWHM) gives 28 — too large for SNAP's structured backgrounds but reasonable for smoother instruments. Manual tuning (win_size=4) is needed for gnarly backgrounds.
+
+### 2026-03-30: EOS, PhaseDescription schema, and non-ambient lattice parameters
+
+**Context**: CIF files correspond to ambient conditions, but the sample may be at high pressure (lattice shrinks) or high temperature (lattice grows). Equations of state (EOS) relate volume to pressure and can predict the expected lattice strain.
+
+**New data models** added to `models.py`:
+- `EquationOfState`: type (murnaghan/birch-murnaghan/vinet), order, V₀ (ų/cell), K₀ (GPa), K′, source citation, extra params
+- `SampleConditions`: pressure (GPa) and temperature (K), both optional
+- `PhaseDescription`: wraps CIF path + role (calibrant/sample) + reference conditions + EOS + stability pressure range. `is_stable_at(pressure)` checks if the phase is expected at a given P.
+
+**JSON serialization**: `tests/test_data/snap_phases.json` — human-editable format with V₀ unit conversion at load time. `load_phase_descriptions(json_path)` in `loaders.py` handles conversion and CIF loading.
+
+**V₀ unit conversion**: Literature V₀ values come in different units. The loader converts to ų/cell:
+- `"A3"` — per cell, no conversion
+- `"A3/atom"` — multiply by Z (atoms/cell)
+- `"cm3/mol"` — multiply by Z × 1e24 / Avogadro
+
+**EOS reference values for test data**:
+- **Tungsten** (calibrant): Vinet, V₀=15.862 ų/atom (Z=2 → 31.724 ų/cell), K₀=295.2±3.9 GPa, K′=4.32±0.11. Source: Dewaele, Loubeyre, Mezouar, PRB 70 094112 (2004).
+- **Ice VII** (sample): 3rd-order Birch-Murnaghan, V₀=12.3±0.3 cm³/mol (Z=2 → 40.85 ų/cell), K₀=23.7±0.6 GPa, K′=4.15±0.07. Source: Hemley, Jephcoat, Mao, Zha, Finger, Cox, Nature 330 737-740 (1987). Note: V₀=40.85 ų is the extrapolated zero-pressure volume; ice VII doesn't exist at P=0.
+
+**Calibrant role**: Tungsten has a well-characterised EOS and is commonly used as a pressure marker. If sample pressure is unknown but tungsten peaks are matched, the pressure can be determined from the calibrant strain.
+
+**Stability ranges**: Ice VII is stable above ~2.1 GPa. Tungsten has no phase transitions in the pressure range of interest. The `stability_pressure` field enables filtering phases by condition.
+
+**Design decisions**:
+- Phase transitions handled by providing multiple CIFs with separate stability ranges — not by modelling the P-T phase boundary
+- EOS is optional: if absent, the peak matcher does a blind strain search
+- `role: "calibrant"` enables pressure-from-calibrant workflow
+- Uncertainties stored as `_err` suffixed keys in `eos.extra` dict
+
+### 2026-03-30: Engine refactoring — peak matching replaces least-squares
+
+**Decision**: The `engine.py` `inspect()` function uses `scipy.optimize.least_squares` to fit a calculated pattern to observed data. This contradicts the core design principle (inspectrum does NOT refine). It will be replaced with a peak-matching pipeline:
+
+1. For each phase, scan trial strain factors s to find the s that maximizes matched peaks between observed and calculated d-spacings
+2. With EOS + known pressure: narrow the search around the EOS-predicted strain
+3. With calibrant: determine pressure from calibrant first, then predict sample strain
+4. Without EOS: blind search s ∈ [0.90, 1.10]
+
+**What to keep from engine.py**: `d_to_tof()`, `tof_to_d()`, `simulate_pattern()`, `_tof_profile_batch()`, `_get_crystal_system()`, `_build_param_vector()` (crystal-system-aware parameterization).
+
+**Full implementation plan**: see `docs/plan.md`.
+
+### 2026-03-30: SpectrumConditions restructured for data provenance
+
+**Change**: `SpectrumConditions` now carries `run_number`, `instrument`, `facility`, and `pgs` (pixel grouping scheme) fields to support locating real datasets on facility data mounts. The `label` field is retained but auto-derived via `resolved_label()` as `"{instrument}{run_number:06d}"` when not set explicitly.
+
+**Global defaults**: `ExperimentDescription` gained `instrument`, `facility`, and `pgs` fields as top-level defaults. Per-spectrum entries can override these. The JSON schema adds these at the root level alongside `global_conditions`.
+
+**JSON schema change**: `spectrum_conditions` entries now use `run_number` (int) instead of `label` (string). Instrument/facility/pgs inherit from global defaults unless overridden per-entry.
+
+**Matching**: `conditions_for(label)` now matches against `resolved_label(self.instrument)` or the explicit `label`, ensuring backward compatibility.
+
+### 2026-03-30: F² structure factor bug — FIXED via full symmetry expansion
+
+**Bug**: `_calc_structure_factor_sq()` in `crystallography.py` only expanded atoms by lattice centering translations (I/F/C/etc.), not by the full set of space group symmetry operations. This worked accidentally for BCC tungsten (single atom at origin + I-centering) but produced wildly wrong F² for ice-VII and any non-trivial structure.
+
+**Diagnosis**: `scripts/audit_fsq.py` showed ice-VII (0,1,1) off by 2×, (1,1,1) should be near-zero but gave F²=6.4 (old CIF), (0,0,2) should be near-zero. Root cause: sum ran over asymmetric unit + centering only, missing rotational symmetry equivalents.
+
+**What Mantid does**: Mantid's `StructureFactorCalculatorSummation.cpp` does the same algorithm — expand each asymmetric unit atom using `spaceGroup->getEquivalentPositions()`, then sum F(hkl) = Σ b·occ·DWF·exp(2πi h·r) over ALL equivalent positions. It's all custom C++, no external library.
+
+**Fix**: 
+1. Parse `_space_group_symop_operation_xyz` strings from CIF into (rotation, translation) pairs — `parse_symop()` in `crystallography.py`
+2. Store parsed symops on `CrystalPhase.symops` (new field)
+3. `expand_position()` applies all symops to generate unique equivalent positions
+4. `_calc_structure_factor_sq()` now sums over full expansion when symops present, with centering-only fallback for legacy CrystalPhase objects without symops
+
+**Validated results (ice-VII D₂O, Pn-3m, a=3.31812 Å)**:
+- O at Wyckoff 2a (3/4,3/4,3/4) → 2 positions ✓
+- D at Wyckoff 8e (0.91012,0.91012,0.91012) → 8 positions ✓
+- (0,0,2) F² ≈ 0.04 (near-extinct: O and D contributions cancel) ✓
+- (0,1,1) F² ≈ 3.14 (strong) ✓
+- Tungsten: F² ≈ 4×0.486² = 0.945 unchanged ✓ (96 symops → same 2 positions)
+
+**cryspy scattering length units**: `cryspy.get_scat_length_neutron()` returns values in 10⁻¹² cm, not fm. So F² is in (10⁻¹² cm)² units. Conversion to fm²: multiply by 100.
+
+### 2026-03-30: Ice-VII CIF updated — D₂O, correct structure
+
+**Old CIF**: `EntryWithCollCode211586_iceVII.cif` — H₂O, fractional occupancies (0.167) on both O and H sites. WRONG for our purposes.
+
+**New CIF**: `EntryWithCollCode211741_iceVII.cif` — D₂O (deuterated, correct for neutron diffraction), Pn-3m Origin 2 (Z suffix), a=3.31812 Å, O at (0.75,0.75,0.75) occ=1.0, D at (0.91012,0.91012,0.91012) occ=0.5. From Yamashita et al., Acta Cryst. B, 2024.
+
+**Origin choice**: `'P n -3 m Z'` — Z suffix denotes Origin 2 (inversion center at origin). Our code handles this correctly because we parse the explicit symops from the CIF rather than looking up operations by space group number.
+
+### 2026-03-30: Pressure-sweep matching — key insight and implementation
+
+**Problem**: Independent per-phase strain sweeps (`identify_phases`) cannot reliably match peaks when phases are under pressure. The strain sweep has no physics constraint linking phases — tungsten and ice-VII are swept independently, leading to incorrect strain estimates and poor peak matching (e.g. only 1/8 tungsten peaks matched at s=1.0).
+
+**Key insight**: All phases in a DAC share the same pressure. Instead of sweeping strain per phase, sweep **pressure** as the shared variable. At each trial P, compute per-phase strains from their EOS via `predicted_strain(eos, P)`, match peaks at those strains, and sum scores.
+
+**Implementation**: `sweep_pressure()` in `matching.py`:
+1. Takes `phase_descriptions` (with EOS) + observed peaks + tolerance + P range
+2. Two-pass coarse+fine grid search (same pattern as `sweep_strain`)
+3. At each trial P: filters phases by `is_stable_at(P)`, computes `s = predicted_strain(eos, P)`, matches all phases at their predicted strains
+4. Contested peaks resolved by smallest |residual| (same as `identify_phases`)
+5. Returns `(best_pressure, MatchResult)` with per-phase strains from EOS
+
+**Scoring function fix**: `_score_matches()` was rewritten with a Gaussian residual penalty: each match contributes `(1 + log1p(F²×mult)) × exp(-2 × (residual/tol)²)`. This makes the sweep sensitive to peak centering, not just peak counting. Without this, score was flat across any strain where all peaks fell within tolerance.
+
+**SNAP059056 results with pressure sweep**:
+- **Best pressure**: ~10 GPa (plausible for the first data point in the series)
+- **Tungsten**: s=0.989 (stiff, barely compresses), 2 peaks matched
+- **Ice-VII**: s=0.919 (significant compression), 7 peaks matched
+- **Total**: 9/13 peaks matched (vs. 3/13 with blind strain sweep at s=1.0)
+- **Improvement**: pressure sweep matches 3× more peaks than independent strain sweeps
+
+**When to use which approach**:
+- `sweep_pressure()` — when phases have EOS data and share a common pressure. Preferred for DAC experiments.
+- `identify_phases()` — fallback when no EOS is available, or for non-pressure experiments.
+- `sweep_strain()` — single-phase strain estimation.
+
+**Test coverage**: 265 tests pass. 6 synthetic tests + 5 SNAP integration tests for `sweep_pressure`.
+
+### 2026-04-01: Spurious peak discrimination — resolution floor + 5σ prominence
+
+**Problem**: `find_peaks_in_spectrum()` was finding 13 peaks in SNAP059056, but only ≤8 are real (tungsten + ice-VII at ~10 GPa). Two failure modes:
+
+1. **Sub-resolution spikes**: Peaks with FWHM < 75% of instrument resolution — physically impossible for real diffraction peaks. These are single-bin counting fluctuations.
+2. **Low-amplitude noise peaks**: Peaks with prominence < 5σ of the noise floor — below the detection threshold for reliable identification.
+
+**Diagnostic** (`scripts/diagnose_peaks.py`): Profiled all 13 peaks. The 5 spurious peaks split cleanly:
+- 3 had FWHM/resolution_FWHM ratios of 0.59, 0.64, 0.73 (sub-resolution)
+- 2 had prom/σ of 3.5 and 4.5 (low-SNR) with near-resolution widths
+
+**Fix — two new filters in `find_peaks_in_spectrum()`**:
+1. **`min_fwhm_factor=0.75`** (new parameter): Rejects peaks whose FWHM < 0.75× instrument FWHM at that d-spacing. Only active when `resolution` is provided. Catches sub-resolution noise spikes.
+2. **`noise_sigma_factor=5.0`** (new parameter): Auto-prominence threshold raised from 1σ → 5σ of the lower-quartile noise. Catches low-amplitude noise fluctuations.
+
+**Result**: 13 → 8 peaks, all 8 matched (7 ice-VII + 1 tungsten), 0 unmatched. Previous: 4 unmatched spurious peaks.
+
+**Impact on tungsten matching**: With the cleaner peak list, only 1 tungsten peak matches (W 110 at d≈2.21) instead of 2. The second W match was likely a coincidental alignment of a spurious peak. The `test_tungsten_found_with_pressure` assertion relaxed from `≥2` to `≥1`.
+
+**Key FWHM ratios for reference** (observed/instrument):
+- Real peaks: 0.78–2.92 (all ≥ 0.75)
+- Spurious spikes: 0.59, 0.64, 0.73 (all < 0.75)
+- The 0.75 cutoff sits between the two groups with good margin
+
+**Test coverage**: 272 tests pass. New synthetic test `test_resolution_filter_rejects_narrow_spikes` validates the min-FWHM filter.
+
+### 2026-04-02: Per-phase lattice parameter refinement — "pressure tuning"
+
+**Problem**: `sweep_pressure()` assumes all phases share the same hydrostatic pressure, but in a DAC the sample (ice-VII, at the center) and calibrant (tungsten, nearer the gasket) experience different strain environments. A shared-pressure sweep gives a compromise pressure (~10.15 GPa) that isn't correct for either phase.
+
+**Solution**: After the pressure sweep identifies which peaks belong to which phase, a per-phase lattice parameter refinement step independently fits lattice parameters to each phase's matched peaks using least-squares in 1/d² space. The refined volumes are then converted to per-phase pressures via their respective EOS.
+
+**Implementation**: `src/inspectrum/lattice.py` (~230 statements):
+- `LatticeRefinementResult` dataclass: refined a/b/c/α/β/γ, volume, EOS-derived pressure, fit statistics
+- `d2_inv_*()` functions for all 7 crystal systems (cubic through triclinic)
+- `_residuals_*()` weighted residual functions for `scipy.optimize.least_squares(method="lm")`
+- `refine_lattice_parameters(phase_match, phase_desc)`: main API — fits lattice params, excludes weak peaks, derives pressure
+- `refine_all_phases(match_result, phase_descriptions)`: batch refinement
+- `format_refinement_report()`: human-readable comparison report
+- Weights: 1/FWHM as uncertainty proxy. Initial guess: CIF params × matched strain.
+
+**snapwrap cubic bug**: SNAPWrap's `latticeFittingFunctions.py::cubic_d2Inv()` has `ref.h*ref.k` instead of `ref.k**2` in the formula `(h² + k² + l²)/a²`. This is fixed in inspectrum's implementation.
+
+**Architecture decision**: Fitting code is in inspectrum (not a snapwrap dependency). snapwrap will eventually import from inspectrum. inspectrum is instrument-agnostic; snapwrap depends on Mantid/snapred which are heavy ORNL-specific dependencies.
+
+**SNAP059056 results**:
+- **Ice-VII**: a = 3.061 Å, V = 28.68 ų, P = 17.56 GPa (7 peaks)
+- **Tungsten**: a = 3.118 Å, V = 30.32 ų, P = 14.72 GPa (1 peak)
+- **Pressure spread**: 2.84 GPa between phases — physically reasonable for sample vs. calibrant in a DAC
+- **Comparison to sweep**: sweep gave 10.15 GPa (shared); refinement shows ice at 17.6 GPa and tungsten at 14.7 GPa
+
+**Note on tungsten**: Only 1 tungsten peak is matched (W 110), so the refinement is exact (0 residual) but has no redundancy. More peaks would improve confidence. This is a data limitation, not an algorithm issue.
+
+**Weak-peak exclusion**: Peaks with `obs_height < min_prominence_sigma × noise_sigma` are excluded from the fit. Default threshold: 5σ. This prevents weak/marginal peaks from biasing the lattice parameter estimate.
+
+**Relationship to "inspectrum does NOT refine" design decision**: This is NOT Rietveld refinement. It fits only lattice parameters (1–6 free params depending on crystal system) to discrete matched peak positions in d-spacing. No profile shape optimization, no background modeling, no intensity fitting. It's the analytical "estimate lattice parameters from peak offsets" step described in the original design — just formalized as a proper least-squares fit rather than a geometric calculation.
+
+**Test coverage**: 300 tests pass. 28 new tests in `test_lattice.py`: 7 d²-inverse formula tests, 4 crystal system identification, 2 cell volume, 6 cubic refinement (exact, single-peak, strained, volume, EOS pressure, weak-peak exclusion), 2 hexagonal refinement, 1 multi-phase, 1 report formatting, 5 SNAP integration tests.

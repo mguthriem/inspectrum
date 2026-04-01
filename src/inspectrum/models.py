@@ -173,6 +173,7 @@ class CrystalPhase:
     space_group: str = ""
     space_group_number: int = 0
     atom_sites: list[dict[str, Any]] = field(default_factory=list)
+    symops: list[tuple[Any, Any]] = field(default_factory=list)
     scale: float = 1.0
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -351,4 +352,339 @@ class InspectionResult:
             f"InspectionResult(phases={phase_names}, "
             f"has_instrument={self.instrument is not None}, "
             f"chi²={self.chi_squared})"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Equation of state & phase description
+# ---------------------------------------------------------------------------
+
+@dataclass
+class EquationOfState:
+    """Isothermal equation of state for a crystal phase.
+
+    Relates unit-cell volume to pressure.  V₀ is always stored in
+    ų per unit cell — conversion from published units happens at
+    load time via :func:`loaders.load_phase_descriptions`.
+
+    Supported EOS types:
+
+    - ``"murnaghan"``: Murnaghan (1944)
+    - ``"birch-murnaghan"``: 3rd-order Birch-Murnaghan
+    - ``"vinet"``: Vinet (Rydberg) universal EOS
+
+    Attributes:
+        eos_type: One of ``"murnaghan"``, ``"birch-murnaghan"``,
+            ``"vinet"``.
+        order: Order of the EOS (e.g. 3 for 3rd-order BM).
+        V_0: Reference volume in ų per unit cell.
+        K_0: Isothermal bulk modulus at reference conditions (GPa).
+        K_prime: Pressure derivative of bulk modulus (dimensionless).
+        source: Literature citation for these parameters.
+        extra: Higher-order coefficients, uncertainties, or other
+            metadata (e.g. ``{"K_0_err": 3.9, "K_prime_err": 0.11}``).
+
+    Example:
+        >>> eos = EquationOfState(
+        ...     eos_type="vinet",
+        ...     V_0=31.724,
+        ...     K_0=295.2,
+        ...     K_prime=4.32,
+        ...     source="Dewaele et al., PRB 70 094112 (2004)",
+        ... )
+    """
+
+    eos_type: str = "birch-murnaghan"
+    order: int = 3
+    V_0: float = 0.0
+    K_0: float = 0.0
+    K_prime: float = 4.0
+    source: str = ""
+    extra: dict[str, float] = field(default_factory=dict)
+
+    _VALID_TYPES = ("murnaghan", "birch-murnaghan", "vinet")
+
+    def __post_init__(self) -> None:
+        if self.eos_type not in self._VALID_TYPES:
+            raise ValueError(
+                f"eos_type must be one of {self._VALID_TYPES}, "
+                f"got {self.eos_type!r}"
+            )
+        if self.V_0 <= 0:
+            raise ValueError(f"V_0 must be positive, got {self.V_0}")
+        if self.K_0 <= 0:
+            raise ValueError(f"K_0 must be positive, got {self.K_0}")
+
+    def __repr__(self) -> str:
+        return (
+            f"EquationOfState(type={self.eos_type!r}, order={self.order}, "
+            f"V₀={self.V_0:.3f} ų, K₀={self.K_0:.1f} GPa, "
+            f"K′={self.K_prime:.2f})"
+        )
+
+
+@dataclass
+class SampleConditions:
+    """Experimental conditions for a measurement or reference state.
+
+    Both fields are optional — ``None`` means unknown or ambient.
+
+    Attributes:
+        pressure: Sample pressure in GPa, or None.
+        temperature: Sample temperature in K, or None.
+
+    Example:
+        >>> cond = SampleConditions(pressure=3.5, temperature=300)
+    """
+
+    pressure: float | None = None
+    temperature: float | None = None
+
+    def __repr__(self) -> str:
+        parts = []
+        if self.pressure is not None:
+            parts.append(f"P={self.pressure} GPa")
+        if self.temperature is not None:
+            parts.append(f"T={self.temperature} K")
+        return f"SampleConditions({', '.join(parts) or 'ambient'})"
+
+
+@dataclass
+class PhaseDescription:
+    """A crystal phase with optional EOS and stability metadata.
+
+    Links a CIF file (via ``cif_path``) to equation-of-state
+    parameters and the conditions under which the CIF lattice
+    parameters were determined.  This is the user-facing input
+    that wraps a :class:`CrystalPhase` with the physics needed
+    to predict lattice parameters at non-ambient conditions.
+
+    Attributes:
+        name: Human label (e.g. ``"tungsten"``, ``"ice-VII"``).
+        cif_path: Path to the CIF file (relative or absolute).
+        role: ``"calibrant"`` or ``"sample"``.  Calibrants have
+            well-known EOS usable for pressure cross-checks.
+        reference_conditions: P/T at which the CIF was determined.
+            Defaults to ambient (None/None).
+        eos: Equation of state, or None if unknown.
+        stability_pressure: ``(P_min, P_max)`` in GPa where this
+            structure is expected to be stable.  None means no
+            constraint (always considered present).  Endpoints
+            of None mean open-ended — e.g. ``(2.1, None)`` means
+            stable above 2.1 GPa with no known upper bound.
+        phase: :class:`CrystalPhase` populated at runtime from CIF.
+            Not serialized to JSON.
+
+    Example:
+        >>> desc = PhaseDescription(
+        ...     name="tungsten",
+        ...     cif_path="tungsten.cif",
+        ...     role="calibrant",
+        ... )
+    """
+
+    name: str = ""
+    cif_path: str = ""
+    role: str = "sample"
+    reference_conditions: SampleConditions = field(
+        default_factory=SampleConditions
+    )
+    eos: EquationOfState | None = None
+    stability_pressure: tuple[float | None, float | None] | None = None
+    phase: CrystalPhase | None = field(default=None, repr=False)
+
+    _VALID_ROLES = ("calibrant", "sample")
+
+    def __post_init__(self) -> None:
+        if self.role not in self._VALID_ROLES:
+            raise ValueError(
+                f"role must be one of {self._VALID_ROLES}, "
+                f"got {self.role!r}"
+            )
+
+    def is_stable_at(self, pressure: float | None) -> bool:
+        """Check whether this phase is expected at the given pressure.
+
+        Returns True if no stability range is defined or if pressure
+        is None (unknown).
+
+        Args:
+            pressure: Pressure in GPa, or None if unknown.
+
+        Returns:
+            True if the phase should be considered present.
+        """
+        if self.stability_pressure is None or pressure is None:
+            return True
+        p_min, p_max = self.stability_pressure
+        if p_min is not None and pressure < p_min:
+            return False
+        if p_max is not None and pressure > p_max:
+            return False
+        return True
+
+    def __repr__(self) -> str:
+        eos_str = self.eos.eos_type if self.eos else "none"
+        return (
+            f"PhaseDescription(name={self.name!r}, role={self.role!r}, "
+            f"eos={eos_str}, cif={self.cif_path!r})"
+        )
+
+
+@dataclass
+class SpectrumConditions:
+    """Per-spectrum conditions and data provenance.
+
+    Holds the identifiers needed to locate a dataset on a facility
+    data mount, plus any known per-run conditions.  Per-run values
+    override the global defaults in :class:`ExperimentDescription`.
+
+    The ``label`` is derived automatically from instrument + run_number
+    if not set explicitly (e.g. ``"SNAP059056"``).
+
+    Attributes:
+        run_number: Unique run identifier (e.g. ``59056``).
+        instrument: Instrument name (e.g. ``"SNAP"``).  Inherits
+            from global if None.
+        facility: Facility name (e.g. ``"SNS"``).  Inherits from
+            global if None.
+        pgs: Pixel grouping scheme (e.g. ``"all"``, ``"bank"``,
+            ``"column"``).  Inherits from global if None.
+        label: Spectrum label for matching.  If empty, derived as
+            ``"{instrument}{run_number:06d}"``.
+        pressure: Per-run pressure (GPa), or None to inherit global.
+        temperature: Per-run temperature (K), or None to inherit global.
+    """
+
+    run_number: int = 0
+    instrument: str | None = None
+    facility: str | None = None
+    pgs: str | None = None
+    label: str = ""
+    pressure: float | None = None
+    temperature: float | None = None
+
+    def resolved_label(self, default_instrument: str = "") -> str:
+        """Return the label, deriving it from instrument + run_number if empty.
+
+        Args:
+            default_instrument: Fallback instrument name from globals.
+
+        Returns:
+            Spectrum label string.
+        """
+        if self.label:
+            return self.label
+        inst = self.instrument or default_instrument
+        if inst and self.run_number:
+            return f"{inst}{self.run_number:06d}"
+        return ""
+
+    def __repr__(self) -> str:
+        parts = []
+        lbl = self.label or f"run={self.run_number}"
+        parts.append(lbl)
+        if self.pressure is not None:
+            parts.append(f"P={self.pressure} GPa")
+        if self.temperature is not None:
+            parts.append(f"T={self.temperature} K")
+        return f"SpectrumConditions({', '.join(parts)})"
+
+
+@dataclass
+class ExperimentDescription:
+    """Top-level experiment description loaded from JSON.
+
+    Groups phase descriptions with global and per-spectrum conditions.
+    Global values act as defaults — per-spectrum values override them.
+
+    Attributes:
+        phases: Phase descriptions with optional EOS.
+        global_temperature: Default temperature for all spectra (K).
+            None means unknown.
+        global_max_pressure: Hard upper bound on pressure across all
+            runs (GPa).  Constrains the strain search window and
+            filters phases by stability.  None means no constraint.
+        instrument: Default instrument name (e.g. ``"SNAP"``).
+        facility: Default facility name (e.g. ``"SNS"``).
+        pgs: Default pixel grouping scheme (e.g. ``"all"``).
+        spectrum_conditions: Per-spectrum overrides.  Matched to
+            spectra by label.
+        metadata: Arbitrary experiment-level metadata.
+
+    Example:
+        >>> exp = ExperimentDescription(
+        ...     phases=[...],
+        ...     global_temperature=295,
+        ...     global_max_pressure=60.0,
+        ...     instrument="SNAP",
+        ...     facility="SNS",
+        ...     pgs="all",
+        ... )
+        >>> exp.conditions_for("SNAP059056")
+        SampleConditions(P=None, T=295 K)
+    """
+
+    phases: list[PhaseDescription] = field(default_factory=list)
+    global_temperature: float | None = None
+    global_max_pressure: float | None = None
+    instrument: str = ""
+    facility: str = ""
+    pgs: str = "all"
+    spectrum_conditions: list[SpectrumConditions] = field(
+        default_factory=list
+    )
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def conditions_for(self, label: str) -> SampleConditions:
+        """Resolve effective conditions for a spectrum by label.
+
+        Per-spectrum values override globals.  If a per-spectrum
+        entry is not found, global values are used.
+
+        Args:
+            label: Spectrum label to look up.
+
+        Returns:
+            Resolved SampleConditions with inherited globals.
+        """
+        pressure: float | None = None
+        temperature = self.global_temperature
+
+        # Look for per-spectrum override
+        for sc in self.spectrum_conditions:
+            resolved = sc.resolved_label(self.instrument)
+            if resolved == label or sc.label == label:
+                if sc.pressure is not None:
+                    pressure = sc.pressure
+                if sc.temperature is not None:
+                    temperature = sc.temperature
+                break
+
+        return SampleConditions(pressure=pressure, temperature=temperature)
+
+    def active_phases_at(
+        self, pressure: float | None = None,
+    ) -> list[PhaseDescription]:
+        """Return phases expected to be stable at the given pressure.
+
+        Uses each phase's ``stability_pressure`` range.  If pressure
+        is None, returns all phases.
+
+        Args:
+            pressure: Pressure in GPa, or None.
+
+        Returns:
+            Filtered list of PhaseDescription objects.
+        """
+        return [p for p in self.phases if p.is_stable_at(pressure)]
+
+    def __repr__(self) -> str:
+        names = [p.name for p in self.phases]
+        return (
+            f"ExperimentDescription(phases={names}, "
+            f"instrument={self.instrument!r}, "
+            f"T={self.global_temperature} K, "
+            f"P_max={self.global_max_pressure} GPa, "
+            f"n_spectra={len(self.spectrum_conditions)})"
         )

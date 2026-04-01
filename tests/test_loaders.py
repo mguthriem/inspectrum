@@ -11,10 +11,12 @@ import numpy as np
 import pytest
 
 from inspectrum.loaders import (
+    _convert_V0_to_A3_per_cell,
     load_cif,
     load_gsa,
     load_instprm,
     load_mantid_csv,
+    load_phase_descriptions,
 )
 
 # Path to test data directory
@@ -204,10 +206,10 @@ class TestLoadCif:
         assert "I m -3 m" in phase.space_group
 
     def test_load_ice_vii_cif(self):
-        """Test loading ice VII CIF — Pn-3m."""
-        phase = load_cif(TEST_DATA / "EntryWithCollCode211586_iceVII.cif")
+        """Test loading ice VII CIF — Pn-3m (D₂O, Yamashita 2024)."""
+        phase = load_cif(TEST_DATA / "EntryWithCollCode211741_iceVII.cif")
 
-        assert phase.a == pytest.approx(3.3891, rel=1e-3)
+        assert phase.a == pytest.approx(3.31812, rel=1e-3)
         assert phase.space_group_number == 224
         assert "P n -3 m" in phase.space_group
 
@@ -221,13 +223,13 @@ class TestLoadCif:
         assert site["fract_x"] == "0"
 
     def test_ice_vii_atom_sites(self):
-        """Test that ice VII has O and H sites."""
-        phase = load_cif(TEST_DATA / "EntryWithCollCode211586_iceVII.cif")
+        """Test that ice VII (D₂O) has O and D sites."""
+        phase = load_cif(TEST_DATA / "EntryWithCollCode211741_iceVII.cif")
 
         assert len(phase.atom_sites) == 2
         labels = {s["label"] for s in phase.atom_sites}
         assert "O1" in labels
-        assert "H1" in labels
+        assert "D1" in labels
 
     def test_tungsten_name_extracted(self):
         """Test that the chemical name is used as the phase label."""
@@ -245,3 +247,176 @@ class TestLoadCif:
         """Test that missing file raises FileNotFoundError."""
         with pytest.raises(FileNotFoundError):
             load_cif(TEST_DATA / "nonexistent.cif")
+
+
+# ---------------------------------------------------------------------------
+# V₀ unit conversion
+# ---------------------------------------------------------------------------
+
+class TestConvertV0:
+    """Tests for _convert_V0_to_A3_per_cell."""
+
+    def test_A3_passthrough(self):
+        """Test that A3 (per cell) is returned unchanged."""
+        assert _convert_V0_to_A3_per_cell(31.7, "A3", 2) == pytest.approx(31.7)
+
+    def test_A3_atom_to_cell(self):
+        """Test A3/atom → A3/cell: V_cell = V_atom × Z."""
+        # Tungsten: 15.862 A3/atom × 2 atoms/cell = 31.724 A3/cell
+        result = _convert_V0_to_A3_per_cell(15.862, "A3/atom", 2)
+        assert result == pytest.approx(31.724, abs=0.001)
+
+    def test_cm3_mol_to_cell(self):
+        """Test cm3/mol → A3/cell for ice VII."""
+        # 12.3 cm3/mol × 2 fu/cell × 1e24 / 6.022e23 = 40.85 A3
+        result = _convert_V0_to_A3_per_cell(12.3, "cm3/mol", 2)
+        assert result == pytest.approx(40.85, abs=0.01)
+
+    def test_unknown_unit_raises_error(self):
+        """Test that unknown unit raises ValueError."""
+        with pytest.raises(ValueError, match="Unknown V_0 unit"):
+            _convert_V0_to_A3_per_cell(10.0, "liters", 1)
+
+
+# ---------------------------------------------------------------------------
+# Phase description loader (JSON)
+# ---------------------------------------------------------------------------
+
+class TestLoadPhaseDescriptions:
+    """Tests for load_phase_descriptions with SNAP test data."""
+
+    def test_loads_two_phases(self):
+        """Test that the SNAP JSON loads tungsten and ice-VII."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        assert len(exp.phases) == 2
+
+    def test_tungsten_is_calibrant(self):
+        """Test tungsten is loaded with calibrant role."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        w = exp.phases[0]
+        assert w.name == "tungsten"
+        assert w.role == "calibrant"
+
+    def test_tungsten_eos_is_vinet(self):
+        """Test tungsten EOS type and parameters."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        eos = exp.phases[0].eos
+        assert eos is not None
+        assert eos.eos_type == "vinet"
+        assert eos.K_0 == pytest.approx(295.2)
+        assert eos.K_prime == pytest.approx(4.32)
+
+    def test_tungsten_V0_converted_from_A3_per_atom(self):
+        """Test tungsten V₀ converted: 15.862 A3/atom × 2 = 31.724 A3."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        eos = exp.phases[0].eos
+        assert eos is not None
+        assert eos.V_0 == pytest.approx(31.724, abs=0.001)
+
+    def test_ice_vii_eos_is_birch_murnaghan(self):
+        """Test ice VII EOS type and parameters."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        eos = exp.phases[1].eos
+        assert eos is not None
+        assert eos.eos_type == "birch-murnaghan"
+        assert eos.K_0 == pytest.approx(23.7)
+        assert eos.K_prime == pytest.approx(4.15)
+
+    def test_ice_vii_V0_converted_from_cm3_mol(self):
+        """Test ice VII V₀ converted: 12.3 cm3/mol × 2 fu → ~40.85 A3."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        eos = exp.phases[1].eos
+        assert eos is not None
+        assert eos.V_0 == pytest.approx(40.85, abs=0.02)
+
+    def test_ice_vii_stability_lower_bound(self):
+        """Test ice VII stability starts at 2.1 GPa."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        ice = exp.phases[1]
+        assert ice.stability_pressure is not None
+        assert ice.stability_pressure[0] == pytest.approx(2.1)
+        assert ice.stability_pressure[1] is None
+
+    def test_cif_loaded_into_phase(self):
+        """Test that CIF is loaded into the phase attribute."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        for desc in exp.phases:
+            assert desc.phase is not None
+            assert desc.phase.a > 0
+            assert desc.phase.space_group_number > 0
+
+    def test_eos_source_preserved(self):
+        """Test that the literature citation is stored."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        assert "Dewaele" in exp.phases[0].eos.source
+        assert "Hemley" in exp.phases[1].eos.source
+
+    def test_eos_errors_in_extra(self):
+        """Test that _err fields are captured in extra dict."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        assert exp.phases[0].eos.extra["K_0_err"] == pytest.approx(3.9)
+        assert exp.phases[1].eos.extra["K_prime_err"] == pytest.approx(0.07)
+
+    def test_reference_conditions(self):
+        """Test reference conditions are parsed."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        assert exp.phases[0].reference_conditions.temperature == pytest.approx(295)
+        assert exp.phases[0].reference_conditions.pressure is None
+
+    def test_file_not_found_raises_error(self):
+        """Test that missing JSON raises FileNotFoundError."""
+        with pytest.raises(FileNotFoundError):
+            load_phase_descriptions(TEST_DATA / "nonexistent.json")
+
+    # --- Global conditions ---
+
+    def test_global_temperature_loaded(self):
+        """Test global temperature is parsed from JSON."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        assert exp.global_temperature == pytest.approx(295)
+
+    def test_global_max_pressure_loaded(self):
+        """Test global max pressure is parsed from JSON."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        assert exp.global_max_pressure == pytest.approx(60.0)
+
+    def test_global_instrument_loaded(self):
+        """Test global instrument is parsed from JSON."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        assert exp.instrument == "SNAP"
+
+    def test_global_facility_loaded(self):
+        """Test global facility is parsed from JSON."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        assert exp.facility == "SNS"
+
+    def test_global_pgs_loaded(self):
+        """Test global pixel_grouping_scheme is parsed from JSON."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        assert exp.pgs == "all"
+
+    def test_spectrum_conditions_loaded(self):
+        """Test per-spectrum conditions are parsed with run_number."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        assert len(exp.spectrum_conditions) == 6
+        assert exp.spectrum_conditions[0].run_number == 59056
+
+    def test_spectrum_resolved_label(self):
+        """Test label is derived from global instrument + run_number."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        sc = exp.spectrum_conditions[0]
+        assert sc.resolved_label(exp.instrument) == "SNAP059056"
+
+    def test_conditions_for_inherits_global_temperature(self):
+        """Test conditions_for() inherits global temperature."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        cond = exp.conditions_for("SNAP059056")
+        assert cond.temperature == pytest.approx(295)
+        assert cond.pressure is None
+
+    def test_conditions_for_unknown_label_uses_globals(self):
+        """Test conditions_for() with unknown label falls back to globals."""
+        exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
+        cond = exp.conditions_for("UNKNOWN_RUN")
+        assert cond.temperature == pytest.approx(295)
+        assert cond.pressure is None
