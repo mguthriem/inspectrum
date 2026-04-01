@@ -2,7 +2,7 @@
 
 **Created**: 2026-03-30  
 **Updated**: 2026-04-01  
-**Status**: In progress — Phase 3  
+**Status**: In progress — Phase 4  
 **Reference**: [project.md](project.md), [ground_truths.md](ground_truths.md)
 
 ---
@@ -82,16 +82,17 @@ Originally planned as a separate step. In practice:
 
 ---
 
-## Phase 3: Engine Refactor — In Progress
+## Phase 3: Engine Refactor — ✅ Complete
 
 ### 3.1 Refactor `engine.py`
 
-Replace the old least-squares `inspect()` with the new pipeline:
+Replaced the old least-squares `inspect()` with the new pipeline:
 
-- **Keep**: `d_to_tof()`, `tof_to_d()` (coordinate transforms used by loaders and plotting)
-- **Replace**: `inspect()` → orchestrate the new pipeline (background → peaks → sweep → refine)
-- **Remove or deprecate**: `simulate_pattern()`, `_tof_profile_batch()`, `_build_param_vector()` — these supported the old least-squares approach; profile simulation is GSAS-II's job
-- **Output**: `InspectionResult` updated to carry `MatchResult` + `LatticeRefinementResult` per phase
+- **Kept**: `d_to_tof()`, `tof_to_d()` (coordinate transforms used by loaders and plotting)
+- **Replaced**: `inspect()` → orchestrates background → peaks → reflections → sweep → refine
+- **Removed**: `simulate_pattern()`, `_tof_profile_batch()`, `_build_param_vector()`, `_unpack_params()`, `_get_crystal_system()`, `_chi_squared()`, `_build_result()` — profile simulation is GSAS-II's job
+- **Output**: `InspectionResult` updated to carry `MatchResult` + `list[LatticeRefinementResult]` + `PeakTable` + `sweep_pressure_gpa`
+- **Tests**: 14 new engine tests (5 coordinate transform + 9 pipeline integration), 314 total passing
 
 ---
 
@@ -142,6 +143,6 @@ Items parked for future consideration:
 | `matching.py` | ✅ | sweep_pressure, sweep_strain, identify_phases, match_peaks_at_strain |
 | `lattice.py` | ✅ | refine_lattice_parameters for all 7 crystal systems, format_refinement_report |
 | `plotting.py` | ✅ | Phase match overlay with refined ticks, annotation box, inspect_peaks |
-| `engine.py` | ⚠️ | Has d_to_tof/tof_to_d (keep) + old least-squares inspect (replace) |
+| `engine.py` | ✅ | d_to_tof/tof_to_d + inspect() pipeline orchestrator (49 stmts, 98% coverage) |
 | `cli.py` | ⚠️ | Stub only |
-| Tests | ✅ | 300 tests across 12 files |
+| Tests | ✅ | 314 tests across 13 files |

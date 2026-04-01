@@ -256,6 +256,10 @@ class TestInspectionResult:
         result = InspectionResult()
         assert result.crystal_phases == []
         assert result.instrument is None
+        assert result.match_result is None
+        assert result.refinements == []
+        assert result.peak_table is None
+        assert result.sweep_pressure_gpa is None
         assert result.processed_spectra is None
         assert result.chi_squared is None
 

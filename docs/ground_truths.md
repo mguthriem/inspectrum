@@ -207,7 +207,13 @@ The instprm `pdabc` block contains 5 columns: d-spacing, TOF, 0, 0, σ_TOF. σ_T
 3. With calibrant: determine pressure from calibrant first, then predict sample strain
 4. Without EOS: blind search s ∈ [0.90, 1.10]
 
-**What to keep from engine.py**: `d_to_tof()`, `tof_to_d()`, `simulate_pattern()`, `_tof_profile_batch()`, `_get_crystal_system()`, `_build_param_vector()` (crystal-system-aware parameterization).
+**Status**: ✅ DONE (2026-04-01). The old least-squares code (~400 lines) has been removed. `engine.py` is now ~175 lines: `d_to_tof`, `tof_to_d` (coordinate transforms) + `inspect()` (pipeline orchestrator). The pipeline: background → peaks → reflections → pressure sweep → lattice refinement.
+
+**What was kept**: `d_to_tof()`, `tof_to_d()` — used by tests, scripts, and loaders.
+
+**What was removed**: `simulate_pattern()`, `_tof_profile_batch()`, `_build_param_vector()`, `_unpack_params()`, `_get_crystal_system()`, `_chi_squared()`, `_build_result()`, `import cryspy`. Profile simulation is GSAS-II's job; crystal system logic moved to `lattice.py`.
+
+**InspectionResult updated**: Now carries `match_result` (MatchResult), `refinements` (list[LatticeRefinementResult]), `peak_table` (PeakTable), `sweep_pressure_gpa` (float). Old `processed_spectra` and `chi_squared` fields retained for backward compat.
 
 **Full implementation plan**: see `docs/plan.md`.
 
@@ -339,3 +345,23 @@ The instprm `pdabc` block contains 5 columns: d-spacing, TOF, 0, 0, σ_TOF. σ_T
 **Relationship to "inspectrum does NOT refine" design decision**: This is NOT Rietveld refinement. It fits only lattice parameters (1–6 free params depending on crystal system) to discrete matched peak positions in d-spacing. No profile shape optimization, no background modeling, no intensity fitting. It's the analytical "estimate lattice parameters from peak offsets" step described in the original design — just formalized as a proper least-squares fit rather than a geometric calculation.
 
 **Test coverage**: 300 tests pass. 28 new tests in `test_lattice.py`: 7 d²-inverse formula tests, 4 crystal system identification, 2 cell volume, 6 cubic refinement (exact, single-peak, strained, volume, EOS pressure, weak-peak exclusion), 2 hexagonal refinement, 1 multi-phase, 1 report formatting, 5 SNAP integration tests.
+
+### 2025-07-21: PyQt5 UI — interactive widget scaffold (Phase 4)
+
+Built the interactive PyQt5 widget for launching from Mantid Workbench. Files in `src/inspectrum/ui/`:
+
+- **`__init__.py`**: Entry points — `show()` (Workbench via `QAppThreadCall`) and `show_standalone()` (dev mode)
+- **`model.py`**: Pure-Python model layer (`InspectrumModel`) — phase management, data loading (files or Mantid workspaces), phase-EOS JSON serialization, pipeline execution via `engine.inspect()`
+- **`worker.py`**: `InspectionWorker(QObject)` with `finished`/`error` signals for QThread background execution
+- **`dataPanel.py`**: Data source toggle (file/workspace), GSA/instprm browse, bank selector, P/T spin boxes
+- **`phasePanel.py`**: Phase list with CIF drag-and-drop, EOS editor (type/V₀/K₀/K′), stability range, save/load JSON
+- **`resultsPanel.py`**: Embedded matplotlib (`FigureCanvasQTAgg`) reusing `plot_phase_matches()`, per-phase summary table
+- **`mainWindow.py`**: `InspectrumWindow(QDialog)` — splitter layout, Run/Clear buttons, progress bar, status label, signal wiring
+
+**Key patterns**: Follows CalibrationManager (SNAPWrap) architecture — module-level `_active_dialog`, `QAppThreadCall` for thread safety, QThread+QObject worker, qtpy imports for Qt abstraction.
+
+**Engine metadata addition**: `engine.inspect()` now stores `bg_subtracted`, `spectrum` (d-space), and `phase_reflections` in result metadata so the UI results panel can plot without re-running the pipeline.
+
+**Manual phase definition** (defining phases without a CIF file) deferred to v2.
+
+**314 tests still pass** after all changes. UI files are 0% coverage (need Qt for import — tested manually via `show_standalone()`).

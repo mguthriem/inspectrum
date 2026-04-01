@@ -15,9 +15,14 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from inspectrum.lattice import LatticeRefinementResult
+    from inspectrum.matching import MatchResult
+    from inspectrum.peakfinding import PeakTable
 from numpy.typing import NDArray
 
 
@@ -326,31 +331,41 @@ class Instrument:
 class InspectionResult:
     """Container for the output of inspect().
 
-    Holds deep copies of the optimised crystal phases and instrument,
-    plus any processed spectra.  The originals passed to inspect() are
-    left untouched.
+    Holds the full pipeline output: matched peaks per phase,
+    refined lattice parameters, and diagnostic metadata.
 
     Attributes:
-        crystal_phases: Optimised CrystalPhase objects (copies).
-        instrument: Optimised Instrument (copy), or None if instrument
-            optimisation was not requested.
+        crystal_phases: Input CrystalPhase objects (copies).
+        instrument: Instrument description (copy).
+        match_result: Multi-phase peak matching result from the
+            pressure sweep, or None if matching was not performed.
+        refinements: Per-phase lattice refinement results.
+        peak_table: Observed peaks found by peak-finding.
+        sweep_pressure_gpa: Best-fit pressure from the pressure
+            sweep (GPa), or None.
         processed_spectra: Processed DiffractionDataset (e.g. after
             background subtraction), or None.
         chi_squared: Goodness-of-fit metric, if available.
-        metadata: Additional diagnostic information from the optimiser.
+        metadata: Additional diagnostic information.
     """
 
     crystal_phases: list[CrystalPhase] = field(default_factory=list)
     instrument: Instrument | None = None
+    match_result: MatchResult | None = None
+    refinements: list[LatticeRefinementResult] = field(default_factory=list)
+    peak_table: PeakTable | None = None
+    sweep_pressure_gpa: float | None = None
     processed_spectra: DiffractionDataset | None = None
     chi_squared: float | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __repr__(self) -> str:
         phase_names = [p.name for p in self.crystal_phases]
+        n_ref = len(self.refinements)
         return (
             f"InspectionResult(phases={phase_names}, "
-            f"has_instrument={self.instrument is not None}, "
+            f"sweep_P={self.sweep_pressure_gpa}, "
+            f"refinements={n_ref}, "
             f"chi²={self.chi_squared})"
         )
 
