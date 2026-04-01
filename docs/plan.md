@@ -1,7 +1,8 @@
 # Inspectrum Implementation Plan
 
 **Created**: 2026-03-30  
-**Status**: In progress  
+**Updated**: 2026-04-01  
+**Status**: In progress — Phase 3  
 **Reference**: [project.md](project.md), [ground_truths.md](ground_truths.md)
 
 ---
@@ -10,7 +11,7 @@
 
 Inspectrum pre-inspects powder diffraction spectra to estimate good starting parameters (lattice parameters, scale factors, peak widths) for Rietveld refinement. It is designed for challenging data: high-pressure neutron diffraction with structured backgrounds and low signal-to-noise.
 
-**Critical design constraint**: inspectrum does NOT refine. It estimates parameters by peak matching and geometric analysis, not by fitting a calculated pattern to observed data.
+**Critical design constraint**: inspectrum does NOT perform Rietveld refinement. It estimates parameters by peak matching and geometric analysis. The one exception is per-phase lattice parameter refinement in 1/d² space (fitting discrete peak positions, not a full profile), which is a small well-constrained problem that cannot diverge.
 
 ---
 
@@ -20,9 +21,9 @@ Inspectrum pre-inspects powder diffraction spectra to estimate good starting par
 Input                        Pre-processing              Inspection                 Output
 ─────                        ──────────────              ──────────                 ──────
 Spectra (.gsa/.csv)    ──►   Background subtraction ──►  Peak finding         ──►  Optimised lattice params
-CIF files              ──►   Generate reflections   ──►  Peak matching        ──►  Optimised scale factors
-Instrument (.instprm)  ──►   Resolution analysis    ──►  Parameter estimation ──►  Optimised peak widths
-Phase descriptions     ──►   EOS-predicted strain   ──►  (narrows search)     ──►  Processed spectra
+CIF files              ──►   Generate reflections   ──►  Peak matching        ──►  Per-phase pressures
+Instrument (.instprm)  ──►   Resolution analysis    ──►  Lattice refinement   ──►  Diagnostic plots
+Phase descriptions     ──►   EOS-predicted strain   ──►  (narrows search)     ──►  Refinement report
 ```
 
 ### Pipeline Steps (in order)
@@ -30,100 +31,100 @@ Phase descriptions     ──►   EOS-predicted strain   ──►  (narrows se
 | # | Step | Input | Output | Module | Status |
 |---|------|-------|--------|--------|--------|
 | 1 | Load data | Files on disk | DiffractionSpectrum, CrystalPhase, Instrument | `loaders.py` | ✅ Done |
-| 2 | Load phase descriptions | JSON file | PhaseDescription with EOS | `loaders.py` | ⬜ Todo |
+| 2 | Load phase descriptions | JSON file | PhaseDescription with EOS | `loaders.py` | ✅ Done |
 | 3 | Background subtraction | Raw spectrum | Background + peak signal | `background.py` | ✅ Done |
-| 4 | Peak finding | Peak signal | PeakTable (positions, FWHM, heights) | `peakfinding.py` | ✅ Done |
+| 4 | Peak finding | Peak signal + resolution | PeakTable (positions, FWHM, heights) | `peakfinding.py` | ✅ Done |
 | 5 | Generate expected reflections | CrystalPhase + d-range | Reflection list (d, hkl, F², mult) | `crystallography.py` | ✅ Done |
-| 6 | **EOS strain prediction** | PhaseDescription + pressure | Predicted strain s = (V/V₀)^(1/3) | `eos.py` (new) | ⬜ Todo |
-| 7 | **Peak matching** | Observed peaks + calculated reflections | Matched pairs (obs_d ↔ calc_d, phase assignment) | `matching.py` (new) | ⬜ Todo |
-| 8 | **Lattice parameter estimation** | Matched pairs | Updated lattice params per phase | `engine.py` (refactored) | ⬜ Todo |
-| 9 | **Scale + width estimation** | Matched pairs + observed heights/FWHM | Scale factors, peak width params | `engine.py` (refactored) | ⬜ Todo |
+| 6 | EOS strain prediction | PhaseDescription + pressure | Predicted strain s = (V/V₀)^(1/3) | `eos.py` | ✅ Done |
+| 7 | Pressure sweep + peak matching | Observed peaks + reflections + EOS | MatchResult (per-phase matched peaks) | `matching.py` | ✅ Done |
+| 8 | Lattice parameter refinement | Matched peaks per phase | Refined lattice params + EOS pressure | `lattice.py` | ✅ Done |
 
 ---
 
-## Phase 1: Schema & EOS (Current)
+## Phase 1: Schema & EOS — ✅ Complete
 
 ### 1.1 New data models in `models.py`
-
-Add three new dataclasses:
 
 - **`EquationOfState`**: EOS type, order, V₀ (ų/cell), K₀ (GPa), K′, source citation, extra params
 - **`SampleConditions`**: pressure (GPa), temperature (K) — both optional  
 - **`PhaseDescription`**: wraps a CIF path + role (calibrant/sample) + reference conditions + EOS + stability range
 
-Key design decisions:
-- V₀ is always stored internally in **ų per unit cell** — conversion from published units (cm³/mol, ų/atom) happens at load time
-- EOS is optional — if absent, the matcher does a blind strain search
-- `role: "calibrant"` marks phases with well-known EOS usable for pressure determination
-
 ### 1.2 JSON serialization + loader
 
-- Human-editable JSON format with `V_0_unit` and `Z` fields for unit conversion
-- Error values stored as `_err` suffixed fields → go into `eos.extra`
-- `load_phase_descriptions(json_path)` returns list of PhaseDescription, CIF loaded automatically
+- `load_phase_descriptions(json_path)` with V₀ unit conversion (ų/atom, cm³/mol → ų/cell)
 
 ### 1.3 Test data
 
-JSON for the current SNAP test dataset:
-- **Tungsten** (calibrant): Vinet EOS from Dewaele et al., PRB 70 094112 (2004). V₀=15.862 ų/atom, K₀=295.2 GPa, K′=4.32
-- **Ice VII** (sample): 3rd-order Birch-Murnaghan from Hemley et al., Nature 330 737 (1987). V₀=12.3 cm³/mol, K₀=23.7 GPa, K′=4.15
+- Tungsten (calibrant): Vinet EOS, V₀=31.724 ų/cell
+- Ice VII (sample): 3rd-order Birch-Murnaghan, V₀=40.849 ų/cell
 
 ---
 
-## Phase 2: Peak Matching Engine
+## Phase 2: Peak Matching Engine — ✅ Complete
 
-### 2.1 Strain search (step 7)
+### 2.1 Pressure sweep (step 7)
 
-For each phase, find the isotropic strain factor s that maximizes the number of matched peaks between observed and calculated d-spacings:
-
-- **With EOS + pressure**: narrow search around s_predicted ± 0.02
-- **With calibrant, no pressure**: determine pressure from calibrant first, then predict sample strain
-- **No EOS**: blind search s ∈ [0.90, 1.10]
-
-Algorithm: for each trial s, compute s·d_calc for all reflections, count observed peaks within tolerance (FWHM from resolution curve). Select s with most matches. This is brute-force and cannot diverge.
+`sweep_pressure()` in `matching.py`: two-pass coarse+fine grid search over shared pressure. At each trial P, per-phase strains from EOS, Gaussian-weighted scoring by residual and F²×multiplicity. Contested peaks resolved by smallest |residual|.
 
 ### 2.2 Multi-phase assignment
 
-Observed peaks may belong to any phase. Strategy:
-- Score each (observed_peak, phase, reflection) triple by proximity and expected intensity (F² × multiplicity)  
-- Strong reflections get priority in matching
-- Assign each observed peak to best-matching reflection across all phases
-- Unmatched observed peaks flagged as potential unknowns
+All phases matched simultaneously at shared pressure. Unmatched peaks tracked. Spurious peak discrimination via resolution floor (0.75× FWHM) and 5σ prominence threshold.
 
-### 2.3 Lattice parameter estimation (step 8)
+### 2.3 Lattice parameter refinement (step 8)
 
-Given matched pairs with strain s:
-- **Cubic**: single parameter a_new = s × a_cif → done
-- **Non-cubic**: different Miller indices have different sensitivity to a, b, c → solve a small linear system from matched peak offsets
-- Uses crystal-system-aware parameterization from existing `_build_param_vector()` logic
+`refine_lattice_parameters()` in `lattice.py`: per-phase least-squares in 1/d² space for all 7 crystal systems. Weak-peak exclusion. EOS-derived per-phase pressures from refined cell volumes. Fixes snapwrap `cubic_d2Inv` bug.
 
-### 2.4 Scale + width estimation (step 9)
+### 2.4 Scale + width estimation — Superseded
 
-- **Relative scale**: ratio of observed peak height to (F² × multiplicity) for matched peaks, median across all matched peaks per phase
-- **Peak widths**: median observed FWHM, mapped to instrument sigma parameters using the resolution model
+Originally planned as a separate step. In practice:
+- **Scale**: not needed — inspectrum's purpose is lattice parameter estimation; Rietveld handles scale refinement
+- **Peak widths**: observed FWHM is already captured in `PeakTable` and used as fitting weights in lattice refinement; instrument width params are handled by GSAS-II
 
 ---
 
-## Phase 3: Integration & Refinement of Engine
+## Phase 3: Engine Refactor — In Progress
 
 ### 3.1 Refactor `engine.py`
 
-- Keep: `d_to_tof()`, `tof_to_d()`, `simulate_pattern()`, `_tof_profile_batch()`, `_get_crystal_system()`, `_build_param_vector()` (crystal-system-aware parameterization)
-- Replace: `inspect()` — swap least-squares fitting for the peak-matching pipeline
-- Keep `InspectionResult` as the output container
+Replace the old least-squares `inspect()` with the new pipeline:
 
-### 3.2 CLI
+- **Keep**: `d_to_tof()`, `tof_to_d()` (coordinate transforms used by loaders and plotting)
+- **Replace**: `inspect()` → orchestrate the new pipeline (background → peaks → sweep → refine)
+- **Remove or deprecate**: `simulate_pattern()`, `_tof_profile_batch()`, `_build_param_vector()` — these supported the old least-squares approach; profile simulation is GSAS-II's job
+- **Output**: `InspectionResult` updated to carry `MatchResult` + `LatticeRefinementResult` per phase
+
+---
+
+## Phase 4: Interfacing — Planned
+
+### 4.1 CLI
 
 Replace the stub `cli.py` with real commands:
-- `inspectrum inspect` — run the full pipeline
+- `inspectrum inspect` — run the full pipeline on a spectrum + phase descriptions
 - `inspectrum preprocess` — background subtraction only
 - `inspectrum peaks` — peak finding only
+- `inspectrum report` — generate refinement report from saved results
 
-### 3.3 Export
+### 4.2 SNAPWrap integration
 
-Output formats for downstream tools:
-- Mantid workspace export (for Mantid Workbench visualization)
-- GSAS-II parameter file update (write optimised params back to .instprm / .EXP)
+Wire inspectrum into the SNAPWrap workflow so it can be called from within SNAP reduction scripts. inspectrum provides the lattice parameter estimation; SNAPWrap handles Mantid-specific I/O and orchestration.
+
+### 4.3 Further interfacing TBD
+
+Additional integration points to be defined based on user needs (e.g. Mantid Workbench plugin, web dashboard, batch processing).
+
+---
+
+## Backlog
+
+Items parked for future consideration:
+
+- **Export to GSAS-II / Mantid**: Write optimised params back to `.instprm` / `.EXP` files, or export as Mantid workspaces. Deferred until the interface layer (Phase 4) clarifies what formats are needed.
+- **Anisotropic strain**: Non-cubic phases at high pressure may have different strain along a, b, c. The lattice refinement already handles this (separate params per axis), but validation on real non-cubic data is needed.
+- **Pressure from calibrant**: If sample pressure is unknown but a calibrant is present, derive pressure from calibrant strain first, then predict sample strain. Currently the sweep does this implicitly (shared pressure); an explicit calibrant-first workflow could improve robustness.
+- **Multiple banks**: Current design is single-bank. Multi-bank matching (same phase, different resolution/d-range) would improve peak statistics.
+- **Phase transitions at unknown conditions**: Detecting unexpected phases is out of scope; current assumption is all present phases have CIFs provided.
+- **Mantid workspace loader**: Read directly from a Mantid `Workspace2D` object (in-memory, no file I/O) for live-processing workflows.
 
 ---
 
@@ -131,22 +132,16 @@ Output formats for downstream tools:
 
 | Module | Status | Summary |
 |--------|--------|---------|
-| `models.py` | ✅ | DiffractionSpectrum, DiffractionDataset, CrystalPhase, Instrument, InspectionResult |
-| `loaders.py` | ✅ | load_gsa, load_mantid_csv, load_instprm, load_cif |
-| `crystallography.py` | ✅ | generate_reflections with all Laue classes, centering rules, structure factors |
-| `background.py` | ✅ | Rolling-ball peak clipping with LLS, tuned for SNAP |
-| `peakfinding.py` | ✅ | find_peaks_in_spectrum with auto-threshold, FWHM, centroid positions |
+| `models.py` | ✅ | DiffractionSpectrum, CrystalPhase, Instrument, EquationOfState, PhaseDescription |
+| `loaders.py` | ✅ | load_gsa, load_mantid_csv, load_instprm, load_cif, load_phase_descriptions |
+| `crystallography.py` | ✅ | generate_reflections with full symop expansion, structure factors |
+| `background.py` | ✅ | Rolling-ball peak clipping with LLS, reflect-padded edges |
+| `peakfinding.py` | ✅ | find_peaks_in_spectrum with resolution floor + 5σ discrimination |
 | `resolution.py` | ✅ | parse_resolution_curve, fwhm_at_d, recommend_parameters |
-| `plotting.py` | ✅ | plot_spectrum, plot_background, plot_peak_markers, inspect_peaks (interactive) |
-| `engine.py` | ⚠️ | Has simulate_pattern (keep) + least-squares inspect (replace) |
+| `eos.py` | ✅ | Murnaghan, Birch-Murnaghan, Vinet; pressure_at, predicted_strain |
+| `matching.py` | ✅ | sweep_pressure, sweep_strain, identify_phases, match_peaks_at_strain |
+| `lattice.py` | ✅ | refine_lattice_parameters for all 7 crystal systems, format_refinement_report |
+| `plotting.py` | ✅ | Phase match overlay with refined ticks, annotation box, inspect_peaks |
+| `engine.py` | ⚠️ | Has d_to_tof/tof_to_d (keep) + old least-squares inspect (replace) |
 | `cli.py` | ⚠️ | Stub only |
-| Tests | ✅ | 150+ tests across 7 files |
-
----
-
-## Open Questions
-
-1. **Anisotropic strain**: For non-cubic phases at high pressure, strain may differ along a, b, c. Phase 2.3 handles this via Miller-index sensitivity, but needs experimental validation.
-2. **Pressure from calibrant**: If spectrum pressure is unknown but a calibrant is present, can we first match the calibrant, derive pressure, then use EOS to predict sample strain? This is a powerful workflow but adds complexity.
-3. **Multiple banks**: Current design is single-bank. Multi-bank matching (same phase, different resolution/d-range) is Phase 3+.
-4. **Phase transitions at unknown conditions**: Current assumption is all present phases have CIFs provided. Detecting unexpected phases is out of scope.
+| Tests | ✅ | 300 tests across 12 files |
