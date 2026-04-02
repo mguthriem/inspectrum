@@ -96,9 +96,65 @@ Replaced the old least-squares `inspect()` with the new pipeline:
 
 ---
 
-## Phase 4: Interfacing — Planned
+## Phase 4: PyQt5 UI Widget — In Progress
 
-### 4.1 CLI
+**Goal**: Interactive GUI launched from Mantid Workbench (or standalone) for
+spectrum inspection with pressure/temperature controls, CIF loading, and
+results display.
+
+**Design pattern**: Follows SNAPWrap's CalibrationManager architecture
+(`/Users/66j/Documents/ORNL/code/SNAPWrap/src/snapwrap/calibrationManager/`).
+
+**Deployment**: Dev in snapwrap pixi env + inspectrum deps → test on RHEL9
+analysis cluster with .nxs datasets → users launch from same Workbench as
+snapwrap.
+
+### 4.1 UI Package — ✅ Scaffold Complete
+
+Seven files in `src/inspectrum/ui/`:
+
+| File | Lines | Purpose | Status |
+|------|-------|---------|--------|
+| `__init__.py` | ~70 | `show()` (Workbench via QAppThreadCall) + `show_standalone()` (dev mode) | ✅ |
+| `model.py` | ~290 | Pure-Python model: phase mgmt, data loading, serialization, pipeline execution | ✅ |
+| `worker.py` | ~45 | `InspectionWorker(QObject)` with finished/error signals for background thread | ✅ |
+| `dataPanel.py` | ~210 | File/workspace source toggle, bank selector, P min/max, temperature | ✅ |
+| `phasePanel.py` | ~300 | CIF list with drag-drop, EOS editor (type/V₀/K₀/K′), stability range, save/load JSON | ✅ |
+| `resultsPanel.py` | ~175 | Embedded matplotlib (`FigureCanvasQTAgg`) reusing `plot_phase_matches()`, summary table | ✅ |
+| `mainWindow.py` | ~230 | `InspectrumWindow(QDialog)` — splitter layout, Run/Clear, QThread worker, progress bar | ✅ |
+
+**Key patterns used**:
+- `qtpy` for Qt bindings (same as CalibrationManager)
+- `QAppThreadCall` for safe launch from Workbench script console
+- `QThread` + `QObject` worker for pipeline execution (~3 sec on SNAP data)
+- `FigureCanvasQTAgg` + `NavigationToolbar2QT` for plot embedding
+- Pure-Python model layer (Qt-agnostic, testable with pytest)
+
+### 4.2 Next Steps — Testing & Polish
+
+| # | Task | Status |
+|---|------|--------|
+| 1 | **Test launch** on analysis cluster (RHEL9 with Mantid Workbench) | Not started |
+| 2 | **Load .nxs test data** via workspace mode and verify full pipeline | Not started |
+| 3 | **Visual polish**: field validation, sensible defaults, error messages | Not started |
+| 4 | **Engine metadata for plotting**: bg_subtracted, spectrum, phase_reflections stored in result.metadata | ✅ Done |
+| 5 | **Manual phase definition** (define lattice params without CIF) | Deferred to v2 |
+
+### 4.3 Launch Instructions
+
+From Mantid Workbench script console:
+```python
+from inspectrum.ui import show
+show()
+```
+
+For standalone development/testing (no Mantid required):
+```python
+from inspectrum.ui import show_standalone
+show_standalone()
+```
+
+### 4.4 CLI (Future)
 
 Replace the stub `cli.py` with real commands:
 - `inspectrum inspect` — run the full pipeline on a spectrum + phase descriptions
@@ -106,13 +162,11 @@ Replace the stub `cli.py` with real commands:
 - `inspectrum peaks` — peak finding only
 - `inspectrum report` — generate refinement report from saved results
 
-### 4.2 SNAPWrap integration
+### 4.5 SNAPWrap Integration (Future)
 
-Wire inspectrum into the SNAPWrap workflow so it can be called from within SNAP reduction scripts. inspectrum provides the lattice parameter estimation; SNAPWrap handles Mantid-specific I/O and orchestration.
-
-### 4.3 Further interfacing TBD
-
-Additional integration points to be defined based on user needs (e.g. Mantid Workbench plugin, web dashboard, batch processing).
+Wire inspectrum into the SNAPWrap workflow so it can be called from within
+SNAP reduction scripts. inspectrum provides the lattice parameter estimation;
+SNAPWrap handles Mantid-specific I/O and orchestration.
 
 ---
 
@@ -144,5 +198,6 @@ Items parked for future consideration:
 | `lattice.py` | ✅ | refine_lattice_parameters for all 7 crystal systems, format_refinement_report |
 | `plotting.py` | ✅ | Phase match overlay with refined ticks, annotation box, inspect_peaks |
 | `engine.py` | ✅ | d_to_tof/tof_to_d + inspect() pipeline orchestrator (49 stmts, 98% coverage) |
+| `ui/` | ✅ scaffold | 7 files: model, worker, dataPanel, phasePanel, resultsPanel, mainWindow, __init__ |
 | `cli.py` | ⚠️ | Stub only |
-| Tests | ✅ | 314 tests across 13 files |
+| Tests | ✅ | 314 tests across 13 files, CI passing (ubuntu + macOS, Python 3.10–3.13) |

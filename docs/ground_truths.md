@@ -346,6 +346,35 @@ The instprm `pdabc` block contains 5 columns: d-spacing, TOF, 0, 0, σ_TOF. σ_T
 
 **Test coverage**: 300 tests pass. 28 new tests in `test_lattice.py`: 7 d²-inverse formula tests, 4 crystal system identification, 2 cell volume, 6 cubic refinement (exact, single-peak, strained, volume, EOS pressure, weak-peak exclusion), 2 hexagonal refinement, 1 multi-phase, 1 report formatting, 5 SNAP integration tests.
 
+### 2026-04-01: Engine refactor (Phase 3.1 complete)
+
+Replaced ~400 lines of old profile-simulation code in `engine.py` with a pipeline orchestrator:
+- `inspect()` runs: background → peaks → reflections → sweep → refine
+- Kept `d_to_tof()` / `tof_to_d()` (used by loaders, plotting, UI)
+- Zero-peaks early-return guard with `noise_sigma` floor (`max(..., 1e-10)`)
+- Result metadata now stores `bg_subtracted`, `spectrum` (in d-space), and `phase_reflections` for UI plotting
+- 14 new engine tests, 314 total tests, 98% engine coverage
+
+### 2026-04-01: PyQt5 UI scaffold (Phase 4.1 complete)
+
+Built 7 files in `src/inspectrum/ui/` following SNAPWrap CalibrationManager pattern:
+- **Entry points**: `show()` (Workbench via `QAppThreadCall`) and `show_standalone()` (dev mode)
+- **Model**: `InspectrumModel` — pure Python, Qt-agnostic, wraps pipeline + phase management + data loading + JSON serialization
+- **Worker**: `InspectionWorker(QObject)` for background thread execution
+- **Panels**: DataPanel (file/workspace, P/T, bank), PhasePanel (CIF list + drag-drop + EOS editor + save/load JSON), ResultsPanel (matplotlib embed + summary table)
+- **Main window**: `InspectrumWindow(QDialog)` — splitter layout, Run/Clear buttons, progress bar, status bar
+- Uses `qtpy` for Qt bindings, `FigureCanvasQTAgg` for plots
+- **Manual phase definition deferred to v2**
+
+### 2026-04-02: CI workflows fixed
+
+- `tests.yml`: Dropped Python 3.9 (requires ≥3.10), dropped Windows (not a target platform), added Python 3.13, fixed `--cov=src/package_name` → `--cov=src/inspectrum`
+- `lint.yml`: Bumped Python to 3.12 for numpy ≥2.2.0 compatibility
+- `pyproject.toml` ruff config: Suppressed E741 (`l` is standard Miller index notation), SIM103/SIM108, C408, ARG001
+- Applied black + ruff formatting across all files
+- GitHub remote: `git@github.com:mguthriem/inspectrum.git` (was template repo)
+- CI matrix: ubuntu-latest + macos-latest × Python 3.10/3.11/3.12/3.13
+
 ### 2025-07-21: PyQt5 UI — interactive widget scaffold (Phase 4)
 
 Built the interactive PyQt5 widget for launching from Mantid Workbench. Files in `src/inspectrum/ui/`:
