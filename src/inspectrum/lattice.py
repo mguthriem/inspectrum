@@ -24,17 +24,15 @@ Typical usage::
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 import cryspy
 import numpy as np
 from scipy.optimize import least_squares
 
-from inspectrum.eos import pressure_at, volume_ratio
+from inspectrum.eos import pressure_at
 from inspectrum.matching import MatchResult, PhaseMatch
-from inspectrum.models import CrystalPhase, EquationOfState, PhaseDescription
-
+from inspectrum.models import CrystalPhase, PhaseDescription
 
 # ---------------------------------------------------------------------------
 # Result container
@@ -78,7 +76,9 @@ class LatticeRefinementResult:
     success: bool = False
 
     def __repr__(self) -> str:
-        p_str = f", P={self.pressure_gpa:.2f} GPa" if self.pressure_gpa is not None else ""
+        p_str = (
+            f", P={self.pressure_gpa:.2f} GPa" if self.pressure_gpa is not None else ""
+        )
         return (
             f"LatticeRefinementResult({self.phase_name!r}, "
             f"{self.crystal_system}, a={self.a:.5f}"
@@ -89,13 +89,15 @@ class LatticeRefinementResult:
         """Compute d-spacing for (h, k, l) from refined lattice parameters."""
         sys = self.crystal_system
         if sys == "cubic":
-            inv = (h * h + k * k + l * l) / (self.a ** 2)
+            inv = (h * h + k * k + l * l) / (self.a**2)
         elif sys in ("tetragonal",):
-            inv = (h * h + k * k) / (self.a ** 2) + (l * l) / (self.c ** 2)
+            inv = (h * h + k * k) / (self.a**2) + (l * l) / (self.c**2)
         elif sys in ("hexagonal", "trigonal"):
-            inv = (4.0 / 3.0) * (h * h + h * k + k * k) / (self.a ** 2) + (l * l) / (self.c ** 2)
+            inv = (4.0 / 3.0) * (h * h + h * k + k * k) / (self.a**2) + (l * l) / (
+                self.c**2
+            )
         elif sys == "orthorhombic":
-            inv = (h * h) / (self.a ** 2) + (k * k) / (self.b ** 2) + (l * l) / (self.c ** 2)
+            inv = (h * h) / (self.a**2) + (k * k) / (self.b**2) + (l * l) / (self.c**2)
         else:
             # monoclinic / triclinic: use the general triclinic formula
             al = np.radians(self.alpha)
@@ -144,15 +146,25 @@ def d2_inv_hexagonal(h: int, k: int, l: int, a: float, c: float) -> float:
 
 
 def d2_inv_orthorhombic(
-    h: int, k: int, l: int, a: float, b: float, c: float,
+    h: int,
+    k: int,
+    l: int,
+    a: float,
+    b: float,
+    c: float,
 ) -> float:
     """1/d² for orthorhombic: h²/a² + k²/b² + l²/c²."""
     return (h * h) / (a * a) + (k * k) / (b * b) + (l * l) / (c * c)
 
 
 def d2_inv_monoclinic(
-    h: int, k: int, l: int,
-    a: float, b: float, c: float, beta: float,
+    h: int,
+    k: int,
+    l: int,
+    a: float,
+    b: float,
+    c: float,
+    beta: float,
 ) -> float:
     """1/d² for monoclinic (unique axis b, β ≠ 90°).
 
@@ -170,9 +182,15 @@ def d2_inv_monoclinic(
 
 
 def d2_inv_triclinic(
-    h: int, k: int, l: int,
-    a: float, b: float, c: float,
-    alpha: float, beta: float, gamma: float,
+    h: int,
+    k: int,
+    l: int,
+    a: float,
+    b: float,
+    c: float,
+    alpha: float,
+    beta: float,
+    gamma: float,
 ) -> float:
     """1/d² for triclinic (general case).
 
@@ -197,8 +215,12 @@ def d2_inv_triclinic(
     s23 = a * a * b * c * (cb * cg - ca)
 
     return (
-        s11 * h * h + s22 * k * k + s33 * l * l
-        + 2.0 * s12 * h * k + 2.0 * s23 * k * l + 2.0 * s13 * h * l
+        s11 * h * h
+        + s22 * k * k
+        + s33 * l * l
+        + 2.0 * s12 * h * k
+        + 2.0 * s23 * k * l
+        + 2.0 * s13 * h * l
     ) / V_sq
 
 
@@ -231,7 +253,9 @@ def _residuals_tetragonal(
     a, c = params
     resid = np.empty(len(d_obs))
     for i, (h, k, l) in enumerate(hkl_list):
-        resid[i] = weights[i] * (d2_inv_tetragonal(h, k, l, a, c) - 1.0 / (d_obs[i] ** 2))
+        resid[i] = weights[i] * (
+            d2_inv_tetragonal(h, k, l, a, c) - 1.0 / (d_obs[i] ** 2)
+        )
     return resid
 
 
@@ -245,7 +269,9 @@ def _residuals_hexagonal(
     a, c = params
     resid = np.empty(len(d_obs))
     for i, (h, k, l) in enumerate(hkl_list):
-        resid[i] = weights[i] * (d2_inv_hexagonal(h, k, l, a, c) - 1.0 / (d_obs[i] ** 2))
+        resid[i] = weights[i] * (
+            d2_inv_hexagonal(h, k, l, a, c) - 1.0 / (d_obs[i] ** 2)
+        )
     return resid
 
 
@@ -259,7 +285,9 @@ def _residuals_orthorhombic(
     a, b, c = params
     resid = np.empty(len(d_obs))
     for i, (h, k, l) in enumerate(hkl_list):
-        resid[i] = weights[i] * (d2_inv_orthorhombic(h, k, l, a, b, c) - 1.0 / (d_obs[i] ** 2))
+        resid[i] = weights[i] * (
+            d2_inv_orthorhombic(h, k, l, a, b, c) - 1.0 / (d_obs[i] ** 2)
+        )
     return resid
 
 
@@ -274,7 +302,9 @@ def _residuals_monoclinic(
     beta = np.radians(beta_deg)
     resid = np.empty(len(d_obs))
     for i, (h, k, l) in enumerate(hkl_list):
-        resid[i] = weights[i] * (d2_inv_monoclinic(h, k, l, a, b, c, beta) - 1.0 / (d_obs[i] ** 2))
+        resid[i] = weights[i] * (
+            d2_inv_monoclinic(h, k, l, a, b, c, beta) - 1.0 / (d_obs[i] ** 2)
+        )
     return resid
 
 
@@ -316,8 +346,12 @@ _SYSTEM_RESIDUALS = {
 
 
 def cell_volume(
-    a: float, b: float, c: float,
-    alpha_deg: float, beta_deg: float, gamma_deg: float,
+    a: float,
+    b: float,
+    c: float,
+    alpha_deg: float,
+    beta_deg: float,
+    gamma_deg: float,
 ) -> float:
     """Compute unit cell volume from lattice parameters.
 
@@ -355,7 +389,9 @@ def _initial_guess(phase: CrystalPhase, system: str) -> np.ndarray:
     elif system == "monoclinic":
         return np.array([phase.a, phase.b, phase.c, phase.beta])
     else:  # triclinic
-        return np.array([phase.a, phase.b, phase.c, phase.alpha, phase.beta, phase.gamma])
+        return np.array(
+            [phase.a, phase.b, phase.c, phase.alpha, phase.beta, phase.gamma]
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -450,9 +486,15 @@ def refine_lattice_parameters(
     strain = phase_match.strain
     guess = _initial_guess(phase, system)
     # Scale the length params by the strain
-    n_lengths = {"cubic": 1, "tetragonal": 2, "hexagonal": 2,
-                 "trigonal": 2, "orthorhombic": 3, "monoclinic": 3,
-                 "triclinic": 3}[system]
+    n_lengths = {
+        "cubic": 1,
+        "tetragonal": 2,
+        "hexagonal": 2,
+        "trigonal": 2,
+        "orthorhombic": 3,
+        "monoclinic": 3,
+        "triclinic": 3,
+    }[system]
     guess[:n_lengths] *= strain
 
     # Run least-squares
@@ -493,8 +535,12 @@ def refine_lattice_parameters(
 
     # Compute volume
     result.volume = cell_volume(
-        result.a, result.b, result.c,
-        result.alpha, result.beta, result.gamma,
+        result.a,
+        result.b,
+        result.c,
+        result.alpha,
+        result.beta,
+        result.gamma,
     )
 
     # Derive pressure from EOS if available
@@ -538,7 +584,8 @@ def refine_all_phases(
         if desc is None:
             continue
         result = refine_lattice_parameters(
-            pm, desc,
+            pm,
+            desc,
             noise_sigma=noise_sigma,
             min_prominence_sigma=min_prominence_sigma,
         )
@@ -604,7 +651,9 @@ def format_refinement_report(
         lines.append("")
 
     # Pressure comparison
-    pressures = [(r.phase_name, r.pressure_gpa) for r in results if r.pressure_gpa is not None]
+    pressures = [
+        (r.phase_name, r.pressure_gpa) for r in results if r.pressure_gpa is not None
+    ]
     if len(pressures) > 1:
         lines.append("Pressure comparison:")
         for name, p in pressures:

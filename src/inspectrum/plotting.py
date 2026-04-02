@@ -28,8 +28,8 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.figure import Figure
 from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from numpy.typing import NDArray
 
 from inspectrum.lattice import LatticeRefinementResult
@@ -83,12 +83,11 @@ def plot_background(
         ``(fig, ax)`` tuple.
     """
     fig, ax = _get_fig_ax(ax)
-    ax.plot(spectrum.x, spectrum.y, linewidth=0.6, color="C0",
-            label="observed", alpha=0.7)
-    ax.plot(spectrum.x, background, linewidth=1.0, color="C1",
-            label="background")
-    ax.plot(spectrum.x, peaks, linewidth=0.5, color="C2",
-            label="peaks", alpha=0.6)
+    ax.plot(
+        spectrum.x, spectrum.y, linewidth=0.6, color="C0", label="observed", alpha=0.7
+    )
+    ax.plot(spectrum.x, background, linewidth=1.0, color="C1", label="background")
+    ax.plot(spectrum.x, peaks, linewidth=0.5, color="C2", label="peaks", alpha=0.6)
     ax.set_xlabel(spectrum.x_unit)
     ax.set_ylabel(spectrum.y_unit)
     ax.set_title(title or f"{spectrum.label or 'Spectrum'} — background")
@@ -133,8 +132,14 @@ def plot_peak_markers(
 
     if reflections is not None:
         calc_d = np.array([r["d"] for r in reflections])
-        ax.vlines(calc_d, ymin=y_max * 0.85, ymax=y_max,
-                  colors="C3", linewidth=0.8, label="calc d")
+        ax.vlines(
+            calc_d,
+            ymin=y_max * 0.85,
+            ymax=y_max,
+            colors="C3",
+            linewidth=0.8,
+            label="calc d",
+        )
 
     if observed_positions is not None:
         if isinstance(observed_positions, PeakTable):
@@ -144,13 +149,23 @@ def plot_peak_markers(
             bar_y = y_max * 0.08
             ax.hlines(
                 [bar_y] * len(obs_d),
-                obs_d - obs_fwhm / 2, obs_d + obs_fwhm / 2,
-                colors="C0", linewidth=1.5, alpha=0.6, label="obs FWHM",
+                obs_d - obs_fwhm / 2,
+                obs_d + obs_fwhm / 2,
+                colors="C0",
+                linewidth=1.5,
+                alpha=0.6,
+                label="obs FWHM",
             )
         else:
             obs_d = observed_positions
-        ax.vlines(obs_d, ymin=0, ymax=y_max * 0.15,
-                  colors="C0", linewidth=0.8, label="obs peaks")
+        ax.vlines(
+            obs_d,
+            ymin=0,
+            ymax=y_max * 0.15,
+            colors="C0",
+            linewidth=0.8,
+            label="obs peaks",
+        )
 
     ax.set_xlabel(spectrum.x_unit)
     ax.set_ylabel(spectrum.y_unit)
@@ -223,7 +238,10 @@ def format_match_table(
         Plain-text table suitable for console output.
     """
     headers, rows = build_match_table(
-        obs_d, match_result, precision=precision, blank=blank,
+        obs_d,
+        match_result,
+        precision=precision,
+        blank=blank,
     )
     widths = [len(h) for h in headers]
     for row in rows:
@@ -349,14 +367,23 @@ def plot_phase_matches(
             bar_y = y_max * 0.08
             ax.hlines(
                 [bar_y] * len(obs_d),
-                obs_d - obs_fwhm / 2, obs_d + obs_fwhm / 2,
-                colors="C0", linewidth=1.5, alpha=0.6, label="obs FWHM",
+                obs_d - obs_fwhm / 2,
+                obs_d + obs_fwhm / 2,
+                colors="C0",
+                linewidth=1.5,
+                alpha=0.6,
+                label="obs FWHM",
             )
         else:
             obs_d = observed_positions
         ax.vlines(
-            obs_d, ymin=0, ymax=y_max * 0.15,
-            colors="C0", linewidth=0.8, alpha=0.9, label="obs peaks",
+            obs_d,
+            ymin=0,
+            ymax=y_max * 0.15,
+            colors="C0",
+            linewidth=0.8,
+            alpha=0.9,
+            label="obs peaks",
         )
 
     n_phases = max(len(match_result.phase_matches), 1)
@@ -415,8 +442,14 @@ def plot_phase_matches(
                 params = f"a={ref.a:.4f}, c={ref.c:.4f}"
             else:
                 params = f"a={ref.a:.4f}, b={ref.b:.4f}, c={ref.c:.4f}"
-            p_str = f", P={ref.pressure_gpa:.1f} GPa" if ref.pressure_gpa is not None else ""
-            lbl = f"{phase_match.phase_name} ({params}{p_str}, n={phase_match.n_matched})"
+            p_str = (
+                f", P={ref.pressure_gpa:.1f} GPa"
+                if ref.pressure_gpa is not None
+                else ""
+            )
+            lbl = (
+                f"{phase_match.phase_name} ({params}{p_str}, n={phase_match.n_matched})"
+            )
         else:
             lbl = (
                 f"{phase_match.phase_name} "
@@ -424,8 +457,11 @@ def plot_phase_matches(
             )
 
         ax.vlines(
-            phase_positions, ymin=y0, ymax=y1,
-            colors=color, linewidth=1.8,
+            phase_positions,
+            ymin=y0,
+            ymax=y1,
+            colors=color,
+            linewidth=1.8,
             label=lbl,
         )
 
@@ -437,20 +473,31 @@ def plot_phase_matches(
     # Annotation box with refinement summary
     if ref_by_name:
         lines = []
-        for r in (refinements or []):
+        for r in refinements or []:
             if not r.success:
                 continue
-            p_str = f"  P = {r.pressure_gpa:.2f} GPa" if r.pressure_gpa is not None else ""
+            p_str = (
+                f"  P = {r.pressure_gpa:.2f} GPa" if r.pressure_gpa is not None else ""
+            )
             if r.crystal_system == "cubic":
-                lines.append(f"{r.phase_name}: a={r.a:.5f} \u00c5, V={r.volume:.2f} \u00c5\u00b3{p_str}")
+                lines.append(
+                    f"{r.phase_name}: a={r.a:.5f} \u00c5, V={r.volume:.2f} \u00c5\u00b3{p_str}"
+                )
             elif r.crystal_system in ("tetragonal", "hexagonal", "trigonal"):
-                lines.append(f"{r.phase_name}: a={r.a:.5f}, c={r.c:.5f} \u00c5, V={r.volume:.2f} \u00c5\u00b3{p_str}")
+                lines.append(
+                    f"{r.phase_name}: a={r.a:.5f}, c={r.c:.5f} \u00c5, V={r.volume:.2f} \u00c5\u00b3{p_str}"
+                )
             else:
-                lines.append(f"{r.phase_name}: a={r.a:.4f}, b={r.b:.4f}, c={r.c:.4f} \u00c5{p_str}")
+                lines.append(
+                    f"{r.phase_name}: a={r.a:.4f}, b={r.b:.4f}, c={r.c:.4f} \u00c5{p_str}"
+                )
         if lines:
             ax.text(
-                0.02, 0.97, "\n".join(lines),
-                transform=ax.transAxes, fontsize=7,
+                0.02,
+                0.97,
+                "\n".join(lines),
+                transform=ax.transAxes,
+                fontsize=7,
                 verticalalignment="top",
                 bbox=dict(boxstyle="round,pad=0.3", facecolor="wheat", alpha=0.7),
             )
@@ -593,7 +640,10 @@ def inspect_peaks(
 
     # --- Build figure ---
     fig, axes = plt.subplots(
-        3, 1, figsize=(12, 9), sharex=True,
+        3,
+        1,
+        figsize=(12, 9),
+        sharex=True,
         gridspec_kw={"hspace": 0.08},
     )
 
@@ -605,12 +655,11 @@ def inspect_peaks(
 
     # Panel 2: background subtraction
     ax2 = axes[1]
-    ax2.plot(spectrum.x, spectrum.y, linewidth=0.5, color="C0",
-             label="observed", alpha=0.5)
-    ax2.plot(spectrum.x, bg, linewidth=1.0, color="C1",
-             label="background")
-    ax2.plot(spectrum.x, peaks_y, linewidth=0.5, color="C2",
-             label="peaks", alpha=0.7)
+    ax2.plot(
+        spectrum.x, spectrum.y, linewidth=0.5, color="C0", label="observed", alpha=0.5
+    )
+    ax2.plot(spectrum.x, bg, linewidth=1.0, color="C1", label="background")
+    ax2.plot(spectrum.x, peaks_y, linewidth=0.5, color="C2", label="peaks", alpha=0.7)
     ax2.set_ylabel(spectrum.y_unit)
     ax2.set_title("Background subtraction")
     ax2.legend(fontsize="small", loc="upper right")
@@ -620,23 +669,34 @@ def inspect_peaks(
     ax3.plot(spectrum.x, peaks_y, linewidth=0.5, color="C2")
     if peak_table.n_peaks > 0:
         ax3.vlines(
-            peak_table.positions, ymin=0,
+            peak_table.positions,
+            ymin=0,
             ymax=peak_table.heights,
-            colors="C3", linewidth=0.8, alpha=0.8,
+            colors="C3",
+            linewidth=0.8,
+            alpha=0.8,
             label=f"{peak_table.n_peaks} peaks",
         )
         # Small dots at the apex
         ax3.plot(
-            peak_table.positions, peak_table.heights,
-            "v", color="C3", markersize=5,
+            peak_table.positions,
+            peak_table.heights,
+            "v",
+            color="C3",
+            markersize=5,
         )
         # FWHM error-bar style: horizontal bars with end caps at half-max
         half_heights = peak_table.heights / 2.0
         ax3.errorbar(
-            peak_table.positions, half_heights,
+            peak_table.positions,
+            half_heights,
             xerr=peak_table.fwhm / 2,
-            fmt="none", ecolor="k", elinewidth=1.5,
-            capsize=4, capthick=1.5, alpha=0.8,
+            fmt="none",
+            ecolor="k",
+            elinewidth=1.5,
+            capsize=4,
+            capthick=1.5,
+            alpha=0.8,
             label="FWHM",
         )
     ax3.set_xlabel(spectrum.x_unit)
@@ -647,9 +707,7 @@ def inspect_peaks(
     # Crosshair cursor on all panels
     cursors = []
     for ax in axes:
-        cursors.append(
-            Cursor(ax, useblit=True, color="gray", linewidth=0.5)
-        )
+        cursors.append(Cursor(ax, useblit=True, color="gray", linewidth=0.5))
     # Keep references alive so the cursors don't get garbage-collected
     fig._inspectrum_cursors = cursors  # type: ignore[attr-defined]
 

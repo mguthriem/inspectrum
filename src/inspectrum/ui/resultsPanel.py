@@ -6,9 +6,6 @@ per-phase lattice parameters after the pipeline runs.
 
 from __future__ import annotations
 
-from typing import Optional
-
-import numpy as np
 from matplotlib.backends.backend_qtagg import (
     FigureCanvasQTAgg as FigureCanvas,
 )
@@ -40,7 +37,7 @@ class ResultsPanel(QWidget):
       number of matched peaks, and residual.
     """
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
@@ -65,10 +62,17 @@ class ResultsPanel(QWidget):
 
         self._table = QTableWidget()
         self._table.setColumnCount(7)
-        self._table.setHorizontalHeaderLabels([
-            "Phase", "a (Å)", "b (Å)", "c (Å)",
-            "V (ų)", "P (GPa)", "# peaks",
-        ])
+        self._table.setHorizontalHeaderLabels(
+            [
+                "Phase",
+                "a (Å)",
+                "b (Å)",
+                "c (Å)",
+                "V (ų)",
+                "P (GPa)",
+                "# peaks",
+            ]
+        )
         self._table.horizontalHeader().setStretchLastSection(True)
         self._table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeToContents,
@@ -108,8 +112,12 @@ class ResultsPanel(QWidget):
         if result.match_result is None or result.peak_table is None:
             ax = self._figure.add_subplot(111)
             ax.text(
-                0.5, 0.5, "No match result",
-                ha="center", va="center", transform=ax.transAxes,
+                0.5,
+                0.5,
+                "No match result",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
             )
             self._canvas.draw_idle()
             return
@@ -122,8 +130,12 @@ class ResultsPanel(QWidget):
         if bg_subtracted is None or spectrum is None:
             ax = self._figure.add_subplot(111)
             ax.text(
-                0.5, 0.5, "Missing spectrum data in result metadata",
-                ha="center", va="center", transform=ax.transAxes,
+                0.5,
+                0.5,
+                "Missing spectrum data in result metadata",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
             )
             self._canvas.draw_idle()
             return
@@ -152,13 +164,19 @@ class ResultsPanel(QWidget):
         for row, ref in enumerate(refs):
             self._table.setItem(row, 0, QTableWidgetItem(ref.phase_name))
             self._table.setItem(
-                row, 1, QTableWidgetItem(f"{ref.a:.5f}" if ref.success else "—"),
+                row,
+                1,
+                QTableWidgetItem(f"{ref.a:.5f}" if ref.success else "—"),
             )
             self._table.setItem(
-                row, 2, QTableWidgetItem(f"{ref.b:.5f}" if ref.success else "—"),
+                row,
+                2,
+                QTableWidgetItem(f"{ref.b:.5f}" if ref.success else "—"),
             )
             self._table.setItem(
-                row, 3, QTableWidgetItem(f"{ref.c:.5f}" if ref.success else "—"),
+                row,
+                3,
+                QTableWidgetItem(f"{ref.c:.5f}" if ref.success else "—"),
             )
             vol = f"{ref.volume:.2f}" if ref.success and ref.volume else "—"
             self._table.setItem(row, 4, QTableWidgetItem(vol))

@@ -21,10 +21,10 @@ from inspectrum.models import (
     SpectrumConditions,
 )
 
-
 # ---------------------------------------------------------------------------
 # DiffractionSpectrum
 # ---------------------------------------------------------------------------
+
 
 class TestDiffractionSpectrum:
     """Tests for DiffractionSpectrum."""
@@ -75,9 +75,7 @@ class TestDiffractionSpectrum:
 
     def test_default_units(self):
         """Test default x and y unit labels."""
-        spec = DiffractionSpectrum(
-            x=np.zeros(1), y=np.zeros(1), e=np.zeros(1)
-        )
+        spec = DiffractionSpectrum(x=np.zeros(1), y=np.zeros(1), e=np.zeros(1))
         assert spec.x_unit == "d-Spacing"
         assert "Counts" in spec.y_unit
 
@@ -85,6 +83,7 @@ class TestDiffractionSpectrum:
 # ---------------------------------------------------------------------------
 # DiffractionDataset
 # ---------------------------------------------------------------------------
+
 
 class TestDiffractionDataset:
     """Tests for DiffractionDataset."""
@@ -99,8 +98,7 @@ class TestDiffractionDataset:
         """Test dataset indexing and length."""
         specs = [
             DiffractionSpectrum(
-                x=np.zeros(5), y=np.zeros(5), e=np.zeros(5),
-                label=f"run{i}"
+                x=np.zeros(5), y=np.zeros(5), e=np.zeros(5), label=f"run{i}"
             )
             for i in range(3)
         ]
@@ -121,6 +119,7 @@ class TestDiffractionDataset:
 # CrystalPhase
 # ---------------------------------------------------------------------------
 
+
 class TestCrystalPhase:
     """Tests for CrystalPhase."""
 
@@ -129,8 +128,12 @@ class TestCrystalPhase:
         # Tungsten: a = 3.16475 Å, cubic
         w = CrystalPhase(
             name="tungsten",
-            a=3.16475, b=3.16475, c=3.16475,
-            alpha=90.0, beta=90.0, gamma=90.0,
+            a=3.16475,
+            b=3.16475,
+            c=3.16475,
+            alpha=90.0,
+            beta=90.0,
+            gamma=90.0,
             space_group="I m -3 m",
             space_group_number=229,
         )
@@ -142,8 +145,12 @@ class TestCrystalPhase:
         """Test volume calculation for ice VII (cubic)."""
         ice = CrystalPhase(
             name="ice-VII",
-            a=3.3891, b=3.3891, c=3.3891,
-            alpha=90.0, beta=90.0, gamma=90.0,
+            a=3.3891,
+            b=3.3891,
+            c=3.3891,
+            alpha=90.0,
+            beta=90.0,
+            gamma=90.0,
             space_group="P n -3 m Z",
             space_group_number=224,
         )
@@ -154,7 +161,9 @@ class TestCrystalPhase:
         """Test that copy() returns a deep copy."""
         original = CrystalPhase(
             name="tungsten",
-            a=3.16475, b=3.16475, c=3.16475,
+            a=3.16475,
+            b=3.16475,
+            c=3.16475,
             atom_sites=[{"label": "W1", "fract_x": 0.0}],
         )
         copied = original.copy()
@@ -176,7 +185,9 @@ class TestCrystalPhase:
         """Test repr shows name and space group."""
         phase = CrystalPhase(
             name="tungsten",
-            a=3.16, b=3.16, c=3.16,
+            a=3.16,
+            b=3.16,
+            c=3.16,
             space_group="I m -3 m",
             space_group_number=229,
         )
@@ -189,6 +200,7 @@ class TestCrystalPhase:
 # ---------------------------------------------------------------------------
 # Instrument
 # ---------------------------------------------------------------------------
+
 
 class TestInstrument:
     """Tests for Instrument."""
@@ -215,10 +227,24 @@ class TestInstrument:
         p = inst.params
 
         expected_keys = {
-            "difA", "difB", "difC", "Zero", "2-theta", "fltPath",
-            "alpha", "beta-0", "beta-1", "beta-q",
-            "sig-0", "sig-1", "sig-2", "sig-q",
-            "X", "Y", "Z", "Azimuth",
+            "difA",
+            "difB",
+            "difC",
+            "Zero",
+            "2-theta",
+            "fltPath",
+            "alpha",
+            "beta-0",
+            "beta-1",
+            "beta-q",
+            "sig-0",
+            "sig-1",
+            "sig-2",
+            "sig-q",
+            "X",
+            "Y",
+            "Z",
+            "Azimuth",
         }
         assert set(p.keys()) == expected_keys
         assert p["difC"] == pytest.approx(5218.45)
@@ -235,8 +261,11 @@ class TestInstrument:
     def test_repr_contains_key_values(self):
         """Test repr shows type, bank, 2θ, difC."""
         inst = Instrument(
-            inst_type="PNT", bank=1,
-            two_theta=85.3, difC=5218.45, flt_path=15.58,
+            inst_type="PNT",
+            bank=1,
+            two_theta=85.3,
+            difC=5218.45,
+            flt_path=15.58,
         )
         r = repr(inst)
         assert "PNT" in r
@@ -247,6 +276,7 @@ class TestInstrument:
 # ---------------------------------------------------------------------------
 # InspectionResult
 # ---------------------------------------------------------------------------
+
 
 class TestInspectionResult:
     """Tests for InspectionResult."""
@@ -292,6 +322,7 @@ class TestInspectionResult:
 # EquationOfState
 # ---------------------------------------------------------------------------
 
+
 class TestEquationOfState:
     """Tests for EquationOfState."""
 
@@ -305,8 +336,8 @@ class TestEquationOfState:
             source="Hemley et al., Nature 330 (1987)",
         )
         assert eos.eos_type == "birch-murnaghan"
-        assert eos.V_0 == pytest.approx(40.85)
-        assert eos.K_0 == pytest.approx(23.7)
+        assert pytest.approx(40.85) == eos.V_0
+        assert pytest.approx(23.7) == eos.K_0
         assert eos.source != ""
 
     def test_create_vinet(self):
@@ -355,6 +386,7 @@ class TestEquationOfState:
 # SampleConditions
 # ---------------------------------------------------------------------------
 
+
 class TestSampleConditions:
     """Tests for SampleConditions."""
 
@@ -383,6 +415,7 @@ class TestSampleConditions:
 # ---------------------------------------------------------------------------
 # PhaseDescription
 # ---------------------------------------------------------------------------
+
 
 class TestPhaseDescription:
     """Tests for PhaseDescription."""
@@ -442,7 +475,9 @@ class TestPhaseDescription:
         desc = PhaseDescription(
             name="W",
             eos=EquationOfState(
-                eos_type="vinet", V_0=31.7, K_0=295.2,
+                eos_type="vinet",
+                V_0=31.7,
+                K_0=295.2,
             ),
         )
         assert "vinet" in repr(desc)
@@ -451,6 +486,7 @@ class TestPhaseDescription:
 # ---------------------------------------------------------------------------
 # SpectrumConditions
 # ---------------------------------------------------------------------------
+
 
 class TestSpectrumConditions:
     """Tests for SpectrumConditions."""
@@ -465,7 +501,10 @@ class TestSpectrumConditions:
     def test_create_with_run_number(self):
         """Test creating conditions with run_number and instrument."""
         sc = SpectrumConditions(
-            run_number=59056, instrument="SNAP", facility="SNS", pgs="all",
+            run_number=59056,
+            instrument="SNAP",
+            facility="SNS",
+            pgs="all",
         )
         assert sc.run_number == 59056
         assert sc.instrument == "SNAP"
@@ -501,6 +540,7 @@ class TestSpectrumConditions:
 # ---------------------------------------------------------------------------
 # ExperimentDescription
 # ---------------------------------------------------------------------------
+
 
 class TestExperimentDescription:
     """Tests for ExperimentDescription."""

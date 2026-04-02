@@ -27,6 +27,7 @@ TEST_DATA = Path(__file__).parent / "test_data"
 # GSA loader
 # ---------------------------------------------------------------------------
 
+
 class TestLoadGsa:
     """Tests for the GSAS FXYE (.gsa) loader."""
 
@@ -78,6 +79,7 @@ class TestLoadGsa:
 # Mantid CSV loader
 # ---------------------------------------------------------------------------
 
+
 class TestLoadMantidCsv:
     """Tests for the Mantid CSV loader."""
 
@@ -125,6 +127,7 @@ class TestLoadMantidCsv:
 # ---------------------------------------------------------------------------
 # Instrument parameter loader
 # ---------------------------------------------------------------------------
+
 
 class TestLoadInstprm:
     """Tests for the GSAS-II .instprm loader."""
@@ -182,14 +185,13 @@ class TestLoadInstprm:
             difc_values.append(inst.difC)
 
         # All should be the same (5218.45)
-        assert all(
-            v == pytest.approx(difc_values[0]) for v in difc_values
-        )
+        assert all(v == pytest.approx(difc_values[0]) for v in difc_values)
 
 
 # ---------------------------------------------------------------------------
 # CIF loader
 # ---------------------------------------------------------------------------
+
 
 class TestLoadCif:
     """Tests for the CIF loader."""
@@ -253,6 +255,7 @@ class TestLoadCif:
 # V₀ unit conversion
 # ---------------------------------------------------------------------------
 
+
 class TestConvertV0:
     """Tests for _convert_V0_to_A3_per_cell."""
 
@@ -282,6 +285,7 @@ class TestConvertV0:
 # Phase description loader (JSON)
 # ---------------------------------------------------------------------------
 
+
 class TestLoadPhaseDescriptions:
     """Tests for load_phase_descriptions with SNAP test data."""
 
@@ -303,7 +307,7 @@ class TestLoadPhaseDescriptions:
         eos = exp.phases[0].eos
         assert eos is not None
         assert eos.eos_type == "vinet"
-        assert eos.K_0 == pytest.approx(295.2)
+        assert pytest.approx(295.2) == eos.K_0
         assert eos.K_prime == pytest.approx(4.32)
 
     def test_tungsten_V0_converted_from_A3_per_atom(self):
@@ -311,7 +315,7 @@ class TestLoadPhaseDescriptions:
         exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
         eos = exp.phases[0].eos
         assert eos is not None
-        assert eos.V_0 == pytest.approx(31.724, abs=0.001)
+        assert pytest.approx(31.724, abs=0.001) == eos.V_0
 
     def test_ice_vii_eos_is_birch_murnaghan(self):
         """Test ice VII EOS type and parameters."""
@@ -319,7 +323,7 @@ class TestLoadPhaseDescriptions:
         eos = exp.phases[1].eos
         assert eos is not None
         assert eos.eos_type == "birch-murnaghan"
-        assert eos.K_0 == pytest.approx(23.7)
+        assert pytest.approx(23.7) == eos.K_0
         assert eos.K_prime == pytest.approx(4.15)
 
     def test_ice_vii_V0_converted_from_cm3_mol(self):
@@ -327,7 +331,7 @@ class TestLoadPhaseDescriptions:
         exp = load_phase_descriptions(TEST_DATA / "snap_phases.json")
         eos = exp.phases[1].eos
         assert eos is not None
-        assert eos.V_0 == pytest.approx(40.85, abs=0.02)
+        assert pytest.approx(40.85, abs=0.02) == eos.V_0
 
     def test_ice_vii_stability_lower_bound(self):
         """Test ice VII stability starts at 2.1 GPa."""

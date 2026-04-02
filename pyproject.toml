@@ -180,9 +180,14 @@ select = [
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
+    "E741",   # ambiguous variable name 'l' — standard Miller index in crystallography
     "B008",   # do not perform function calls in argument defaults
     "C901",   # too complex (let developers decide)
     "W191",   # indentation contains tabs
+    "SIM103", # return-bool-op — can reduce readability
+    "SIM108", # ternary-op — can reduce readability for multi-line cases
+    "C408",   # unnecessary dict() call — style preference
+    "ARG001", # unused function argument — reserved for future use
 ]
 
 [tool.ruff.lint.per-file-ignores]

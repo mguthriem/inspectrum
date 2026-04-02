@@ -11,7 +11,6 @@ Reference values:
   At 10 GPa, V/V₀ ≈ 0.720; at 30 GPa, V/V₀ ≈ 0.595.
 """
 
-import numpy as np
 import pytest
 
 from inspectrum.eos import (
@@ -24,10 +23,10 @@ from inspectrum.eos import (
 )
 from inspectrum.models import EquationOfState
 
-
 # ---------------------------------------------------------------------------
 # Fixtures: EOS parameter sets
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def tungsten_eos() -> EquationOfState:
@@ -72,6 +71,7 @@ def murnaghan_eos() -> EquationOfState:
 # Forward evaluation: P(V/V₀)
 # ---------------------------------------------------------------------------
 
+
 class TestPressureForward:
     """Test forward EOS evaluation: V/V₀ → P."""
 
@@ -115,8 +115,12 @@ class TestPressureForward:
         """Unknown EOS type raises ValueError at construction."""
         with pytest.raises(ValueError, match="eos_type must be one of"):
             EquationOfState(
-                eos_type="unknown", order=3, V_0=100, K_0=100,
-                K_prime=4, source="test",
+                eos_type="unknown",
+                order=3,
+                V_0=100,
+                K_0=100,
+                K_prime=4,
+                source="test",
             )
 
     def test_pressure_at_nonpositive_v_ratio_raises(self, tungsten_eos):
@@ -128,6 +132,7 @@ class TestPressureForward:
 # ---------------------------------------------------------------------------
 # Inverse evaluation: P → V/V₀
 # ---------------------------------------------------------------------------
+
 
 class TestVolumeRatio:
     """Test inverse EOS evaluation: P → V/V₀."""
@@ -197,6 +202,7 @@ class TestVolumeRatio:
 # ---------------------------------------------------------------------------
 # Predicted strain
 # ---------------------------------------------------------------------------
+
 
 class TestPredictedStrain:
     """Test strain prediction: P → s = (V/V₀)^(1/3)."""

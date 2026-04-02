@@ -58,18 +58,18 @@ class TestPassesCentering:
         assert _passes_centering(1, 1, 1, "P") is True
 
     def test_i_requires_hkl_even_sum(self):
-        assert _passes_centering(1, 1, 0, "I") is True   # 1+1+0=2
-        assert _passes_centering(1, 0, 0, "I") is False   # 1+0+0=1
-        assert _passes_centering(2, 1, 1, "I") is True    # 2+1+1=4
+        assert _passes_centering(1, 1, 0, "I") is True  # 1+1+0=2
+        assert _passes_centering(1, 0, 0, "I") is False  # 1+0+0=1
+        assert _passes_centering(2, 1, 1, "I") is True  # 2+1+1=4
 
     def test_f_requires_all_same_parity(self):
-        assert _passes_centering(1, 1, 1, "F") is True    # all odd
-        assert _passes_centering(2, 0, 0, "F") is True    # all even
-        assert _passes_centering(1, 1, 0, "F") is False   # mixed
+        assert _passes_centering(1, 1, 1, "F") is True  # all odd
+        assert _passes_centering(2, 0, 0, "F") is True  # all even
+        assert _passes_centering(1, 1, 0, "F") is False  # mixed
 
     def test_c_requires_hk_even_sum(self):
-        assert _passes_centering(1, 1, 0, "C") is True    # 1+1=2
-        assert _passes_centering(1, 0, 0, "C") is False   # 1+0=1
+        assert _passes_centering(1, 1, 0, "C") is True  # 1+1=2
+        assert _passes_centering(1, 0, 0, "C") is False  # 1+0=1
 
 
 class TestParseCifNumber:
@@ -156,9 +156,7 @@ class TestGenerateReflectionsTungsten:
         refs = generate_reflections(tungsten, d_min=0.79, d_max=2.50)
         f_sq_values = [r["F_sq"] for r in refs]
         # All should be approximately 4 * 0.486² ≈ 0.945
-        assert all(
-            f == pytest.approx(f_sq_values[0], rel=1e-2) for f in f_sq_values
-        )
+        assert all(f == pytest.approx(f_sq_values[0], rel=1e-2) for f in f_sq_values)
         assert f_sq_values[0] == pytest.approx(4 * 0.486**2, rel=0.01)
 
     def test_no_odd_sum_reflections(self, tungsten):
@@ -207,16 +205,24 @@ class TestGenerateReflectionsMinimal:
         """Simple cubic with a=2.0 should give a handful of reflections."""
         phase = CrystalPhase(
             name="simple_cubic",
-            a=2.0, b=2.0, c=2.0,
-            alpha=90.0, beta=90.0, gamma=90.0,
+            a=2.0,
+            b=2.0,
+            c=2.0,
+            alpha=90.0,
+            beta=90.0,
+            gamma=90.0,
             space_group="P m -3 m",
             space_group_number=221,
-            atom_sites=[{
-                "label": "X1",
-                "type_symbol": "Fe",
-                "fract_x": "0", "fract_y": "0", "fract_z": "0",
-                "occupancy": "1.0",
-            }],
+            atom_sites=[
+                {
+                    "label": "X1",
+                    "type_symbol": "Fe",
+                    "fract_x": "0",
+                    "fract_y": "0",
+                    "fract_z": "0",
+                    "occupancy": "1.0",
+                }
+            ],
         )
         refs = generate_reflections(phase, d_min=0.5, d_max=3.0)
         assert len(refs) > 0
@@ -228,8 +234,12 @@ class TestGenerateReflectionsMinimal:
         """Very narrow d-range with no reflections returns empty list."""
         phase = CrystalPhase(
             name="test",
-            a=5.0, b=5.0, c=5.0,
-            alpha=90.0, beta=90.0, gamma=90.0,
+            a=5.0,
+            b=5.0,
+            c=5.0,
+            alpha=90.0,
+            beta=90.0,
+            gamma=90.0,
             space_group="P m -3 m",
             space_group_number=221,
         )
@@ -241,6 +251,7 @@ class TestGenerateReflectionsMinimal:
 # ---------------------------------------------------------------------------
 # Symmetry operation parsing and position expansion
 # ---------------------------------------------------------------------------
+
 
 class TestParseSymop:
     """Tests for parse_symop()."""

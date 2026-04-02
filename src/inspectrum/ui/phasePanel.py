@@ -9,10 +9,7 @@ Provides:
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional
-
-from qtpy.QtCore import Qt, Signal  # type: ignore
+from qtpy.QtCore import Signal  # type: ignore
 from qtpy.QtWidgets import (  # type: ignore
     QComboBox,
     QDoubleSpinBox,
@@ -45,7 +42,7 @@ class PhasePanel(QWidget):
     def __init__(
         self,
         model: InspectrumModel,
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._model = model
@@ -108,9 +105,14 @@ class PhasePanel(QWidget):
         eos_form = QFormLayout(eos_group)
 
         self._eosTypeCombo = QComboBox()
-        self._eosTypeCombo.addItems([
-            "(none)", "birch-murnaghan", "vinet", "murnaghan",
-        ])
+        self._eosTypeCombo.addItems(
+            [
+                "(none)",
+                "birch-murnaghan",
+                "vinet",
+                "murnaghan",
+            ]
+        )
         self._eosTypeCombo.currentIndexChanged.connect(self._onEosTypeChanged)
         eos_form.addRow("Type:", self._eosTypeCombo)
 
@@ -178,9 +180,7 @@ class PhasePanel(QWidget):
         self._phaseList.clear()
         for desc in self._model.phases:
             eos_tag = f" [{desc.eos.eos_type}]" if desc.eos else ""
-            item = QListWidgetItem(
-                f"{desc.name} ({desc.role}){eos_tag}"
-            )
+            item = QListWidgetItem(f"{desc.name} ({desc.role}){eos_tag}")
             self._phaseList.addItem(item)
         self._onPhaseSelected(self._phaseList.currentRow())
 
@@ -240,9 +240,7 @@ class PhasePanel(QWidget):
         self._nameEdit.setText(desc.name)
         phase = desc.phase
         if phase:
-            self._sgEdit.setText(
-                f"{phase.space_group} (#{phase.space_group_number})"
-            )
+            self._sgEdit.setText(f"{phase.space_group} (#{phase.space_group_number})")
             self._latticeLabel.setText(
                 f"a={phase.a:.4f}  b={phase.b:.4f}  c={phase.c:.4f}  "
                 f"α={phase.alpha:.1f}  β={phase.beta:.1f}  γ={phase.gamma:.1f}"
@@ -352,7 +350,7 @@ class _CIFDropList(QListWidget):
 
     cifDropped = Signal(str)
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setAcceptDrops(True)
 

@@ -31,10 +31,10 @@ from inspectrum.models import (
     SpectrumConditions,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _parse_cif_number(value_str: str) -> float:
     """Parse a CIF numeric value, stripping uncertainty in parentheses.
@@ -66,6 +66,7 @@ def _parse_cif_number(value_str: str) -> float:
 # ---------------------------------------------------------------------------
 # GSA loader (GSAS FXYE format, TOF x-axis)
 # ---------------------------------------------------------------------------
+
 
 def load_gsa(filepath: str | Path) -> list[DiffractionSpectrum]:
     """Load diffraction spectra from a GSAS FXYE (.gsa) file.
@@ -126,16 +127,18 @@ def load_gsa(filepath: str | Path) -> list[DiffractionSpectrum]:
             if stripped.startswith("BANK"):
                 # If we already have data from a previous bank, save it
                 if current_bank is not None and tof_vals:
-                    spectra.append(DiffractionSpectrum(
-                        x=np.array(tof_vals, dtype=np.float64),
-                        y=np.array(y_vals, dtype=np.float64),
-                        e=np.array(e_vals, dtype=np.float64),
-                        x_unit="TOF",
-                        y_unit="Counts",
-                        label=path.stem,
-                        bank=current_bank - 1,  # 0-based
-                        metadata=dict(metadata),
-                    ))
+                    spectra.append(
+                        DiffractionSpectrum(
+                            x=np.array(tof_vals, dtype=np.float64),
+                            y=np.array(y_vals, dtype=np.float64),
+                            e=np.array(e_vals, dtype=np.float64),
+                            x_unit="TOF",
+                            y_unit="Counts",
+                            label=path.stem,
+                            bank=current_bank - 1,  # 0-based
+                            metadata=dict(metadata),
+                        )
+                    )
                     tof_vals, y_vals, e_vals = [], [], []
 
                 # Parse BANK line: BANK <n> <npts> <npts> SLOG ...
@@ -153,16 +156,18 @@ def load_gsa(filepath: str | Path) -> list[DiffractionSpectrum]:
 
     # Save the last bank
     if current_bank is not None and tof_vals:
-        spectra.append(DiffractionSpectrum(
-            x=np.array(tof_vals, dtype=np.float64),
-            y=np.array(y_vals, dtype=np.float64),
-            e=np.array(e_vals, dtype=np.float64),
-            x_unit="TOF",
-            y_unit="Counts",
-            label=path.stem,
-            bank=current_bank - 1,  # 0-based
-            metadata=dict(metadata),
-        ))
+        spectra.append(
+            DiffractionSpectrum(
+                x=np.array(tof_vals, dtype=np.float64),
+                y=np.array(y_vals, dtype=np.float64),
+                e=np.array(e_vals, dtype=np.float64),
+                x_unit="TOF",
+                y_unit="Counts",
+                label=path.stem,
+                bank=current_bank - 1,  # 0-based
+                metadata=dict(metadata),
+            )
+        )
 
     if not spectra:
         raise ValueError(f"No BANK data found in {path}")
@@ -173,6 +178,7 @@ def load_gsa(filepath: str | Path) -> list[DiffractionSpectrum]:
 # ---------------------------------------------------------------------------
 # Mantid CSV loader (d-spacing x-axis)
 # ---------------------------------------------------------------------------
+
 
 def load_mantid_csv(filepath: str | Path) -> list[DiffractionSpectrum]:
     """Load diffraction spectra from a Mantid-exported CSV file.
@@ -242,16 +248,18 @@ def load_mantid_csv(filepath: str | Path) -> list[DiffractionSpectrum]:
                 if spec_match:
                     # Save previous spectrum if exists
                     if current_spectrum is not None and d_vals:
-                        spectra.append(DiffractionSpectrum(
-                            x=np.array(d_vals, dtype=np.float64),
-                            y=np.array(y_vals, dtype=np.float64),
-                            e=np.array(e_vals, dtype=np.float64),
-                            x_unit=x_unit,
-                            y_unit=y_unit,
-                            label=path.stem,
-                            bank=current_spectrum - 1,  # 0-based
-                            metadata=dict(metadata),
-                        ))
+                        spectra.append(
+                            DiffractionSpectrum(
+                                x=np.array(d_vals, dtype=np.float64),
+                                y=np.array(y_vals, dtype=np.float64),
+                                e=np.array(e_vals, dtype=np.float64),
+                                x_unit=x_unit,
+                                y_unit=y_unit,
+                                label=path.stem,
+                                bank=current_spectrum - 1,  # 0-based
+                                metadata=dict(metadata),
+                            )
+                        )
                         d_vals, y_vals, e_vals = [], [], []
                     current_spectrum = int(spec_match.group(1))
 
@@ -268,16 +276,18 @@ def load_mantid_csv(filepath: str | Path) -> list[DiffractionSpectrum]:
     # Save last spectrum
     if d_vals:
         bank = (current_spectrum - 1) if current_spectrum is not None else 0
-        spectra.append(DiffractionSpectrum(
-            x=np.array(d_vals, dtype=np.float64),
-            y=np.array(y_vals, dtype=np.float64),
-            e=np.array(e_vals, dtype=np.float64),
-            x_unit=x_unit,
-            y_unit=y_unit,
-            label=path.stem,
-            bank=bank,
-            metadata=dict(metadata),
-        ))
+        spectra.append(
+            DiffractionSpectrum(
+                x=np.array(d_vals, dtype=np.float64),
+                y=np.array(y_vals, dtype=np.float64),
+                e=np.array(e_vals, dtype=np.float64),
+                x_unit=x_unit,
+                y_unit=y_unit,
+                label=path.stem,
+                bank=bank,
+                metadata=dict(metadata),
+            )
+        )
 
     if not spectra:
         raise ValueError(f"No spectrum data found in {path}")
@@ -398,6 +408,7 @@ def load_instprm(filepath: str | Path) -> Instrument:
 # CIF loader
 # ---------------------------------------------------------------------------
 
+
 def load_cif(filepath: str | Path) -> CrystalPhase:
     """Load a crystal structure from a CIF file.
 
@@ -429,9 +440,7 @@ def load_cif(filepath: str | Path) -> CrystalPhase:
         beta = _parse_cif_number(data["_cell_angle_beta"].value)
         gamma = _parse_cif_number(data["_cell_angle_gamma"].value)
     except (KeyError, TypeError) as exc:
-        raise ValueError(
-            f"CIF {path} missing required cell parameters"
-        ) from exc
+        raise ValueError(f"CIF {path} missing required cell parameters") from exc
 
     # Space group
     space_group = ""
@@ -484,6 +493,7 @@ def load_cif(filepath: str | Path) -> CrystalPhase:
                 break
 
     from inspectrum.crystallography import parse_symop
+
     symops = [parse_symop(s) for s in symop_strings]
 
     return CrystalPhase(
@@ -510,7 +520,9 @@ _AVOGADRO = 6.02214076e23
 
 
 def _convert_V0_to_A3_per_cell(
-    value: float, unit: str, Z: int,
+    value: float,
+    unit: str,
+    Z: int,
 ) -> float:
     """Convert V₀ from a published unit to ų per unit cell.
 
@@ -609,8 +621,14 @@ def load_phase_descriptions(
             # Collect extra/error fields
             extra: dict[str, float] = {}
             skip_keys = {
-                "type", "order", "V_0", "V_0_unit", "Z",
-                "K_0", "K_prime", "source",
+                "type",
+                "order",
+                "V_0",
+                "V_0_unit",
+                "Z",
+                "K_0",
+                "K_prime",
+                "source",
             }
             for k, v in eos_raw.items():
                 if k not in skip_keys and isinstance(v, (int, float)):

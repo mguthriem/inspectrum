@@ -23,10 +23,10 @@ from dataclasses import dataclass, field
 import numpy as np
 from numpy.typing import NDArray
 
-
 # ---------------------------------------------------------------------------
 # Result containers
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class MatchedPeak:
@@ -103,6 +103,7 @@ class MatchResult:
 # Core matching
 # ---------------------------------------------------------------------------
 
+
 def match_peaks_at_strain(
     obs_d: NDArray[np.float64],
     obs_heights: NDArray[np.float64],
@@ -159,18 +160,20 @@ def match_peaks_at_strain(
                 continue
             if diffs[idx_int] <= tol[idx_int]:
                 used_obs.add(idx_int)
-                matches.append(MatchedPeak(
-                    obs_idx=idx_int,
-                    obs_d=float(obs_d[idx_int]),
-                    obs_height=float(obs_heights[idx_int]),
-                    obs_fwhm=float(obs_fwhm[idx_int]),
-                    calc_d=ref["d"],
-                    strained_d=d_strained,
-                    hkl=tuple(ref["hkl"]),
-                    multiplicity=ref["multiplicity"],
-                    F_sq=ref["F_sq"],
-                    residual=float(obs_d[idx_int] - d_strained),
-                ))
+                matches.append(
+                    MatchedPeak(
+                        obs_idx=idx_int,
+                        obs_d=float(obs_d[idx_int]),
+                        obs_height=float(obs_heights[idx_int]),
+                        obs_fwhm=float(obs_fwhm[idx_int]),
+                        calc_d=ref["d"],
+                        strained_d=d_strained,
+                        hkl=tuple(ref["hkl"]),
+                        multiplicity=ref["multiplicity"],
+                        F_sq=ref["F_sq"],
+                        residual=float(obs_d[idx_int] - d_strained),
+                    )
+                )
                 break  # move to next reflection
 
     return matches
@@ -206,7 +209,9 @@ def _score_matches(
         # Positional quality: Gaussian-like penalty based on residual
         if tolerance is not None:
             tol_arr = np.atleast_1d(np.asarray(tolerance, dtype=np.float64))
-            local_tol = float(tol_arr[m.obs_idx]) if tol_arr.size > 1 else float(tol_arr[0])
+            local_tol = (
+                float(tol_arr[m.obs_idx]) if tol_arr.size > 1 else float(tol_arr[0])
+            )
             if local_tol > 0:
                 # Gaussian: 1.0 at centre, ~0.01 at tol boundary
                 weight *= np.exp(-2.0 * (m.residual / local_tol) ** 2)
@@ -258,7 +263,12 @@ def sweep_strain(
 
     for s in coarse_strains:
         matches = match_peaks_at_strain(
-            obs_d, obs_heights, obs_fwhm, reflections, s, tolerance,
+            obs_d,
+            obs_heights,
+            obs_fwhm,
+            reflections,
+            s,
+            tolerance,
         )
         score = _score_matches(matches, tolerance)
         if score > best_score:
@@ -275,7 +285,12 @@ def sweep_strain(
 
     for s in fine_strains:
         matches = match_peaks_at_strain(
-            obs_d, obs_heights, obs_fwhm, reflections, s, tolerance,
+            obs_d,
+            obs_heights,
+            obs_fwhm,
+            reflections,
+            s,
+            tolerance,
         )
         score = _score_matches(matches, tolerance)
         if score > best_score:
@@ -326,18 +341,26 @@ def identify_phases(
     for name, refs in phase_reflections.items():
         s_min, s_max = strain_ranges.get(name, (0.90, 1.10))
         best_s, matches, score = sweep_strain(
-            obs_d, obs_heights, obs_fwhm, refs, tolerance,
-            s_min=s_min, s_max=s_max,
-            n_coarse=n_coarse, n_fine=n_fine,
+            obs_d,
+            obs_heights,
+            obs_fwhm,
+            refs,
+            tolerance,
+            s_min=s_min,
+            s_max=s_max,
+            n_coarse=n_coarse,
+            n_fine=n_fine,
         )
-        phase_matches.append(PhaseMatch(
-            phase_name=name,
-            strain=best_s,
-            n_matched=len(matches),
-            n_expected=len(refs),
-            matched_peaks=matches,
-            score=score,
-        ))
+        phase_matches.append(
+            PhaseMatch(
+                phase_name=name,
+                strain=best_s,
+                n_matched=len(matches),
+                n_expected=len(refs),
+                matched_peaks=matches,
+                score=score,
+            )
+        )
 
     # --- Resolve contested observed peaks ---
     # If an observed peak is claimed by multiple phases, give it to
@@ -348,15 +371,17 @@ def identify_phases(
     for pi, pm in enumerate(phase_matches):
         for mp in pm.matched_peaks:
             abs_res = abs(mp.residual)
-            if mp.obs_idx not in obs_assignments:
-                obs_assignments[mp.obs_idx] = (pi, abs_res)
-            elif abs_res < obs_assignments[mp.obs_idx][1]:
+            if (
+                mp.obs_idx not in obs_assignments
+                or abs_res < obs_assignments[mp.obs_idx][1]
+            ):
                 obs_assignments[mp.obs_idx] = (pi, abs_res)
 
     # Rebuild matched_peaks lists with contested peaks resolved
     for pi, pm in enumerate(phase_matches):
         resolved = [
-            mp for mp in pm.matched_peaks
+            mp
+            for mp in pm.matched_peaks
             if obs_assignments.get(mp.obs_idx, (None,))[0] == pi
         ]
         pm.matched_peaks = resolved
@@ -379,6 +404,7 @@ def identify_phases(
 # ---------------------------------------------------------------------------
 # Pressure sweep (physics-informed matching)
 # ---------------------------------------------------------------------------
+
 
 def sweep_pressure(
     obs_d: NDArray[np.float64],
@@ -431,7 +457,8 @@ def sweep_pressure(
 
     # Filter to phases that have EOS and reflections
     active = [
-        d for d in phase_descriptions
+        d
+        for d in phase_descriptions
         if d.eos is not None and d.name in phase_reflections
     ]
 
@@ -456,7 +483,12 @@ def sweep_pressure(
             except ValueError:
                 continue  # P outside EOS validity range
             matches = match_peaks_at_strain(
-                obs_d, obs_heights, obs_fwhm, refs, s, tolerance,
+                obs_d,
+                obs_heights,
+                obs_fwhm,
+                refs,
+                s,
+                tolerance,
             )
             score = _score_matches(matches, tolerance)
             total += score
@@ -495,28 +527,32 @@ def sweep_pressure(
     for desc in active:
         if desc.name in best_pdata:
             s, matches = best_pdata[desc.name]
-            phase_matches.append(PhaseMatch(
-                phase_name=desc.name,
-                strain=s,
-                n_matched=len(matches),
-                n_expected=len(phase_reflections[desc.name]),
-                matched_peaks=matches,
-                score=_score_matches(matches, tolerance),
-            ))
+            phase_matches.append(
+                PhaseMatch(
+                    phase_name=desc.name,
+                    strain=s,
+                    n_matched=len(matches),
+                    n_expected=len(phase_reflections[desc.name]),
+                    matched_peaks=matches,
+                    score=_score_matches(matches, tolerance),
+                )
+            )
 
     # Resolve contested observed peaks (smallest |residual| wins)
     obs_assignments: dict[int, tuple[int, float]] = {}
     for pi, pm in enumerate(phase_matches):
         for mp in pm.matched_peaks:
             abs_res = abs(mp.residual)
-            if mp.obs_idx not in obs_assignments:
-                obs_assignments[mp.obs_idx] = (pi, abs_res)
-            elif abs_res < obs_assignments[mp.obs_idx][1]:
+            if (
+                mp.obs_idx not in obs_assignments
+                or abs_res < obs_assignments[mp.obs_idx][1]
+            ):
                 obs_assignments[mp.obs_idx] = (pi, abs_res)
 
     for pi, pm in enumerate(phase_matches):
         resolved = [
-            mp for mp in pm.matched_peaks
+            mp
+            for mp in pm.matched_peaks
             if obs_assignments.get(mp.obs_idx, (None,))[0] == pi
         ]
         pm.matched_peaks = resolved

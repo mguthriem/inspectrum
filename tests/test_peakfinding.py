@@ -7,13 +7,14 @@ import pytest
 
 from inspectrum.peakfinding import PeakTable, find_peaks_in_spectrum
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_gaussian(x: np.ndarray, centre: float, amplitude: float,
-                   sigma: float) -> np.ndarray:
+
+def _make_gaussian(
+    x: np.ndarray, centre: float, amplitude: float, sigma: float
+) -> np.ndarray:
     """Create a Gaussian peak."""
     return amplitude * np.exp(-0.5 * ((x - centre) / sigma) ** 2)
 
@@ -57,6 +58,7 @@ def _synthetic_spectrum(
 # PeakTable
 # ---------------------------------------------------------------------------
 
+
 class TestPeakTable:
 
     def test_n_peaks(self):
@@ -94,6 +96,7 @@ class TestPeakTable:
 # Input validation
 # ---------------------------------------------------------------------------
 
+
 class TestInputValidation:
 
     def test_mismatched_lengths_raises(self):
@@ -109,6 +112,7 @@ class TestInputValidation:
 # Synthetic spectra — clean
 # ---------------------------------------------------------------------------
 
+
 class TestSyntheticClean:
     """Test peak finding on clean (noiseless) synthetic data."""
 
@@ -119,9 +123,7 @@ class TestSyntheticClean:
 
     def test_peak_positions_accurate(self):
         centres = [1.0, 1.5, 2.0]
-        x, y = _synthetic_spectrum(peak_params=[
-            (c, 50.0, 0.015) for c in centres
-        ])
+        x, y = _synthetic_spectrum(peak_params=[(c, 50.0, 0.015) for c in centres])
         pt = find_peaks_in_spectrum(x, y)
         for expected in centres:
             diffs = np.abs(pt.positions - expected)
@@ -150,9 +152,9 @@ class TestSyntheticClean:
         pt = find_peaks_in_spectrum(x, y, min_width_pts=3)
         expected_fwhm = 2.3548 * sigma
         assert pt.n_peaks == 1
-        assert abs(pt.fwhm[0] - expected_fwhm) < 0.005, (
-            f"FWHM={pt.fwhm[0]:.4f}, expected ≈{expected_fwhm:.4f}"
-        )
+        assert (
+            abs(pt.fwhm[0] - expected_fwhm) < 0.005
+        ), f"FWHM={pt.fwhm[0]:.4f}, expected ≈{expected_fwhm:.4f}"
 
     def test_centroid_subpixel_accuracy(self):
         """Centroid should be more accurate than grid spacing."""
@@ -172,6 +174,7 @@ class TestSyntheticClean:
 # ---------------------------------------------------------------------------
 # Synthetic spectra — noisy
 # ---------------------------------------------------------------------------
+
 
 class TestSyntheticNoisy:
     """Test peak finding on noisy synthetic data."""
@@ -206,6 +209,7 @@ class TestSyntheticNoisy:
 # Edge cases
 # ---------------------------------------------------------------------------
 
+
 class TestEdgeCases:
 
     def test_flat_signal_no_peaks(self):
@@ -227,7 +231,7 @@ class TestEdgeCases:
         x, y = _synthetic_spectrum(
             peak_params=[
                 (1.0, 50.0, 0.015),
-                (1.5, 5.0, 0.015),   # weak peak
+                (1.5, 5.0, 0.015),  # weak peak
                 (2.0, 50.0, 0.015),
             ],
         )
@@ -264,17 +268,16 @@ class TestEdgeCases:
 # Real data (SNAP)
 # ---------------------------------------------------------------------------
 
+
 class TestSNAPData:
     """Integration tests on real SNAP diffraction data."""
 
     @pytest.fixture()
     def snap_data(self):
-        from inspectrum.loaders import load_mantid_csv
         from inspectrum.background import estimate_background
+        from inspectrum.loaders import load_mantid_csv
 
-        spectra = load_mantid_csv(
-            "tests/test_data/SNAP059056_all_test-0.csv"
-        )
+        spectra = load_mantid_csv("tests/test_data/SNAP059056_all_test-0.csv")
         s = spectra[0]
         bg, peaks_y = estimate_background(s.y)
         return s.x, peaks_y

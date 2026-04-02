@@ -25,7 +25,6 @@ import numpy as np
 
 from inspectrum.models import CrystalPhase
 
-
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -86,9 +85,15 @@ def generate_reflections(
                     continue
 
                 inv_d = cryspy.calc_inverse_d_by_hkl_abc_angles(
-                    h, k, l_idx,
-                    phase.a, phase.b, phase.c,
-                    al, be, ga,
+                    h,
+                    k,
+                    l_idx,
+                    phase.a,
+                    phase.b,
+                    phase.c,
+                    al,
+                    be,
+                    ga,
                 )
                 if inv_d <= 0:
                     continue
@@ -99,15 +104,21 @@ def generate_reflections(
 
                 mult = _multiplicity(h, k, l_idx, phase.space_group_number)
                 f_sq = _calc_structure_factor_sq(
-                    h, k, l_idx, d, phase,
+                    h,
+                    k,
+                    l_idx,
+                    d,
+                    phase,
                 )
 
-                reflections.append({
-                    "hkl": (h, k, l_idx),
-                    "d": d,
-                    "multiplicity": mult,
-                    "F_sq": f_sq,
-                })
+                reflections.append(
+                    {
+                        "hkl": (h, k, l_idx),
+                        "d": d,
+                        "multiplicity": mult,
+                        "F_sq": f_sq,
+                    }
+                )
 
     # Sort by decreasing d-spacing
     reflections.sort(key=lambda r: -r["d"])
@@ -244,10 +255,18 @@ def _hexagonal_equivalents(
     i = -(h + k)
     # The 12 in-plane operations on (h, k, i) keeping l sign
     hex_perms = [
-        (h, k), (k, i), (i, h),
-        (-h, -k), (-k, -i), (-i, -h),
-        (k, h), (h, i), (i, k),
-        (-k, -h), (-h, -i), (-i, -k),
+        (h, k),
+        (k, i),
+        (i, h),
+        (-h, -k),
+        (-k, -i),
+        (-i, -h),
+        (k, h),
+        (h, i),
+        (i, k),
+        (-k, -h),
+        (-h, -i),
+        (-i, -k),
     ]
     for hh, kk in hex_perms:
         equivalents.add((hh, kk, l_val))
@@ -258,8 +277,7 @@ def _tetragonal_equivalents(
     h: int, k: int, l_val: int, equivalents: set[tuple[int, int, int]]
 ) -> None:
     """Equivalents for tetragonal Laue class 4/mmm."""
-    perms_hk = [(h, k), (-h, -k), (-k, h), (k, -h),
-                (k, h), (-k, -h), (h, -k), (-h, k)]
+    perms_hk = [(h, k), (-h, -k), (-k, h), (k, -h), (k, h), (-k, -h), (h, -k), (-h, k)]
     for hh, kk in perms_hk:
         equivalents.add((hh, kk, l_val))
         equivalents.add((hh, kk, -l_val))
@@ -413,7 +431,7 @@ _CENTERING_VECTORS: dict[str, list[tuple[float, float, float]]] = {
     "A": [(0.0, 0.0, 0.0), (0.0, 0.5, 0.5)],
     "B": [(0.0, 0.0, 0.0), (0.5, 0.0, 0.5)],
     "C": [(0.0, 0.0, 0.0), (0.5, 0.5, 0.0)],
-    "R": [(0.0, 0.0, 0.0), (2/3, 1/3, 1/3), (1/3, 2/3, 2/3)],
+    "R": [(0.0, 0.0, 0.0), (2 / 3, 1 / 3, 1 / 3), (1 / 3, 2 / 3, 2 / 3)],
 }
 
 

@@ -11,15 +11,16 @@ from inspectrum.resolution import (
     recommend_parameters,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def snap_instrument():
     """Load the real SNAP instprm for bank 0."""
     from inspectrum.loaders import load_instprm
+
     return load_instprm("tests/test_data/SNAP059056_all.instprm")
 
 
@@ -27,6 +28,7 @@ def snap_instrument():
 def snap_spectrum():
     """Load a real SNAP spectrum (d-spacing)."""
     from inspectrum.loaders import load_mantid_csv
+
     spectra = load_mantid_csv("tests/test_data/SNAP059056_all_test-0.csv")
     return spectra[0]
 
@@ -236,7 +238,8 @@ class TestResolutionAwarePeakFinding:
 
         # With resolution filter (min 0.75× instrument): only the real peak
         table_filtered = find_peaks_in_spectrum(
-            x, y,
+            x,
+            y,
             min_prominence=5.0,
             min_width_pts=1,
             resolution=(d_curve, fwhm_curve),
@@ -269,7 +272,8 @@ class TestResolutionAwarePeakFinding:
 
         # With resolution filter (max 5× instrument): only the real peak
         table_filtered = find_peaks_in_spectrum(
-            x, y,
+            x,
+            y,
             min_prominence=5.0,
             min_width_pts=2,
             resolution=(d_curve, fwhm_curve),
@@ -284,9 +288,7 @@ class TestResolutionAwarePeakFinding:
         from inspectrum.peakfinding import find_peaks_in_spectrum
 
         d_curve, fwhm_curve = parse_resolution_curve(snap_instrument)
-        bg, peaks_y = estimate_background(
-            snap_spectrum.y, win_size=4, smoothing=1.0
-        )
+        bg, peaks_y = estimate_background(snap_spectrum.y, win_size=4, smoothing=1.0)
         table = find_peaks_in_spectrum(
             snap_spectrum.x,
             peaks_y,

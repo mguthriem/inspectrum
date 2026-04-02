@@ -9,9 +9,8 @@ Provides controls for:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
-from qtpy.QtCore import Qt, Signal  # type: ignore
+from qtpy.QtCore import Signal  # type: ignore
 from qtpy.QtWidgets import (  # type: ignore
     QComboBox,
     QDoubleSpinBox,
@@ -38,7 +37,7 @@ class DataPanel(QWidget):
 
     dataChanged = Signal()
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)

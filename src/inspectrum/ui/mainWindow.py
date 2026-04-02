@@ -7,9 +7,7 @@ status bar.  Wires signals/slots for the complete interactive workflow.
 
 from __future__ import annotations
 
-from typing import Optional
-
-from qtpy.QtCore import QThread, Qt  # type: ignore
+from qtpy.QtCore import Qt, QThread  # type: ignore
 from qtpy.QtWidgets import (  # type: ignore
     QDialog,
     QHBoxLayout,
@@ -18,7 +16,6 @@ from qtpy.QtWidgets import (  # type: ignore
     QProgressBar,
     QPushButton,
     QSplitter,
-    QStatusBar,
     QVBoxLayout,
     QWidget,
 )
@@ -48,7 +45,7 @@ class InspectrumWindow(QDialog):
         parent: Optional parent widget.
     """
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Inspectrum — Diffraction Inspector")
         self.resize(1200, 720)
@@ -132,7 +129,9 @@ class InspectrumWindow(QDialog):
 
         if not self._model.phases:
             QMessageBox.information(
-                self, "No Phases", "Add at least one CIF phase before running.",
+                self,
+                "No Phases",
+                "Add at least one CIF phase before running.",
             )
             return
 
@@ -206,6 +205,7 @@ class InspectrumWindow(QDialog):
             )
             if dp.instprm_path:
                 from inspectrum.loaders import load_instprm
+
                 self._model.instrument = load_instprm(dp.instprm_path)
             else:
                 self._model.load_instrument_from_workspace(dp.workspace_name)

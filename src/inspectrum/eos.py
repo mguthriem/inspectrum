@@ -44,9 +44,7 @@ def _pressure_birch_murnaghan(v_ratio: float, K_0: float, K_prime: float) -> flo
     """
     # Eulerian finite strain f = [(V₀/V)^(2/3) - 1] / 2
     f = 0.5 * (v_ratio ** (-2.0 / 3.0) - 1.0)
-    return 3.0 * K_0 * f * (1.0 + 2.0 * f) ** 2.5 * (
-        1.0 + 1.5 * (K_prime - 4.0) * f
-    )
+    return 3.0 * K_0 * f * (1.0 + 2.0 * f) ** 2.5 * (1.0 + 1.5 * (K_prime - 4.0) * f)
 
 
 def _pressure_vinet(v_ratio: float, K_0: float, K_prime: float) -> float:
@@ -62,8 +60,7 @@ def _pressure_vinet(v_ratio: float, K_0: float, K_prime: float) -> float:
     """
     eta = v_ratio ** (1.0 / 3.0)  # linear strain ratio
     return (
-        3.0 * K_0 * (1.0 - eta) / eta**2
-        * np.exp(1.5 * (K_prime - 1.0) * (1.0 - eta))
+        3.0 * K_0 * (1.0 - eta) / eta**2 * np.exp(1.5 * (K_prime - 1.0) * (1.0 - eta))
     )
 
 

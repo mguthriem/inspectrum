@@ -33,7 +33,6 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.signal import find_peaks, peak_prominences, peak_widths
 
-
 # ---------------------------------------------------------------------------
 # Result container
 # ---------------------------------------------------------------------------
@@ -135,9 +134,7 @@ def find_peaks_in_spectrum(
             than 3 points.
     """
     if len(x) != len(y):
-        raise ValueError(
-            f"x and y must have equal length, got {len(x)} and {len(y)}"
-        )
+        raise ValueError(f"x and y must have equal length, got {len(x)} and {len(y)}")
     if len(x) < 3:
         raise ValueError(f"Need at least 3 data points, got {len(x)}")
 
@@ -194,9 +191,8 @@ def find_peaks_in_spectrum(
         d_curve, fwhm_curve = resolution
         positions_tmp = x[idx]
         expected_fwhm = np.interp(positions_tmp, d_curve, fwhm_curve)
-        keep_res = (
-            (fwhm <= max_fwhm_factor * expected_fwhm)
-            & (fwhm >= min_fwhm_factor * expected_fwhm)
+        keep_res = (fwhm <= max_fwhm_factor * expected_fwhm) & (
+            fwhm >= min_fwhm_factor * expected_fwhm
         )
         idx = idx[keep_res]
         proms = proms[keep_res]

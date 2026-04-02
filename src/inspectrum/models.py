@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -25,10 +24,10 @@ if TYPE_CHECKING:
     from inspectrum.peakfinding import PeakTable
 from numpy.typing import NDArray
 
-
 # ---------------------------------------------------------------------------
 # Diffraction data
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class DiffractionSpectrum:
@@ -117,8 +116,7 @@ class DiffractionDataset:
 
     def __repr__(self) -> str:
         return (
-            f"DiffractionDataset(label={self.label!r}, "
-            f"n_spectra={self.n_spectra})"
+            f"DiffractionDataset(label={self.label!r}, " f"n_spectra={self.n_spectra})"
         )
 
     def __getitem__(self, index: int) -> DiffractionSpectrum:
@@ -131,6 +129,7 @@ class DiffractionDataset:
 # ---------------------------------------------------------------------------
 # Crystal phase
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class CrystalPhase:
@@ -195,13 +194,11 @@ class CrystalPhase:
         ga = np.radians(self.gamma)
         cos_al, cos_be, cos_ga = np.cos(al), np.cos(be), np.cos(ga)
         return float(
-            a * b * c
+            a
+            * b
+            * c
             * np.sqrt(
-                1
-                - cos_al**2
-                - cos_be**2
-                - cos_ga**2
-                + 2 * cos_al * cos_be * cos_ga
+                1 - cos_al**2 - cos_be**2 - cos_ga**2 + 2 * cos_al * cos_be * cos_ga
             )
         )
 
@@ -221,6 +218,7 @@ class CrystalPhase:
 # ---------------------------------------------------------------------------
 # Instrument
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class Instrument:
@@ -327,6 +325,7 @@ class Instrument:
 # Inspection result
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class InspectionResult:
     """Container for the output of inspect().
@@ -373,6 +372,7 @@ class InspectionResult:
 # ---------------------------------------------------------------------------
 # Equation of state & phase description
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class EquationOfState:
@@ -501,9 +501,7 @@ class PhaseDescription:
     name: str = ""
     cif_path: str = ""
     role: str = "sample"
-    reference_conditions: SampleConditions = field(
-        default_factory=SampleConditions
-    )
+    reference_conditions: SampleConditions = field(default_factory=SampleConditions)
     eos: EquationOfState | None = None
     stability_pressure: tuple[float | None, float | None] | None = None
     phase: CrystalPhase | None = field(default=None, repr=False)
@@ -513,8 +511,7 @@ class PhaseDescription:
     def __post_init__(self) -> None:
         if self.role not in self._VALID_ROLES:
             raise ValueError(
-                f"role must be one of {self._VALID_ROLES}, "
-                f"got {self.role!r}"
+                f"role must be one of {self._VALID_ROLES}, " f"got {self.role!r}"
             )
 
     def is_stable_at(self, pressure: float | None) -> bool:
@@ -646,9 +643,7 @@ class ExperimentDescription:
     instrument: str = ""
     facility: str = ""
     pgs: str = "all"
-    spectrum_conditions: list[SpectrumConditions] = field(
-        default_factory=list
-    )
+    spectrum_conditions: list[SpectrumConditions] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def conditions_for(self, label: str) -> SampleConditions:
@@ -679,7 +674,8 @@ class ExperimentDescription:
         return SampleConditions(pressure=pressure, temperature=temperature)
 
     def active_phases_at(
-        self, pressure: float | None = None,
+        self,
+        pressure: float | None = None,
     ) -> list[PhaseDescription]:
         """Return phases expected to be stable at the given pressure.
 

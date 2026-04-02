@@ -88,9 +88,7 @@ def _peak_clip(
 
     # Scan window sizes: large→small (coarse-to-fine) or small→large
     scan = (
-        list(range(win_size + 1, 0, -1))
-        if decrease
-        else list(range(1, win_size + 1))
+        list(range(win_size + 1, 0, -1)) if decrease else list(range(1, win_size + 1))
     )
 
     for w in scan:

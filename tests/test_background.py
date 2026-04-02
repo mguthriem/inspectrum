@@ -116,9 +116,7 @@ class TestEstimateBackgroundSynthetic:
 
         # Background should be close to 50 away from peaks
         away_from_peaks = (x < 2.5) | ((x > 3.5) & (x < 4.5)) | (x > 7.5)
-        np.testing.assert_allclose(
-            bg[away_from_peaks], 50.0, atol=5.0
-        )
+        np.testing.assert_allclose(bg[away_from_peaks], 50.0, atol=5.0)
 
     def test_sloped_background(self):
         """Should track a linearly sloped background."""
@@ -159,6 +157,7 @@ class TestEstimateBackgroundSNAP:
     @pytest.fixture
     def snap_y(self):
         from inspectrum.loaders import load_mantid_csv
+
         spectra = load_mantid_csv(TEST_DATA / "SNAP059056_all_test-0.csv")
         return spectra[0].y
 

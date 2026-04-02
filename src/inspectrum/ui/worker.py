@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from qtpy.QtCore import QObject, Signal  # type: ignore
 
-from inspectrum.models import InspectionResult
 from inspectrum.ui.model import InspectrumModel
 
 

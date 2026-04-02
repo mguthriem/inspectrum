@@ -12,7 +12,6 @@ import pytest
 from inspectrum.engine import d_to_tof, inspect, tof_to_d
 from inspectrum.models import Instrument
 
-
 # ---------------------------------------------------------------------------
 # Coordinate transforms
 # ---------------------------------------------------------------------------
@@ -108,7 +107,8 @@ class TestInspect:
         result = inspect(spec, inst, exp)
 
         phase_names = {
-            pm.phase_name for pm in result.match_result.phase_matches
+            pm.phase_name
+            for pm in result.match_result.phase_matches
             if pm.n_matched > 0
         }
         assert "ice-VII" in phase_names
@@ -128,9 +128,7 @@ class TestInspect:
         spec, inst, exp = snap_inputs
         result = inspect(spec, inst, exp)
 
-        ice_ref = next(
-            r for r in result.refinements if r.phase_name == "ice-VII"
-        )
+        ice_ref = next(r for r in result.refinements if r.phase_name == "ice-VII")
         # At ~17 GPa, ice-VII a ≈ 3.0-3.1 Å
         assert 2.9 < ice_ref.a < 3.2, f"ice-VII a={ice_ref.a:.4f} out of range"
 

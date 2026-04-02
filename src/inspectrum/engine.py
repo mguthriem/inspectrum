@@ -42,7 +42,6 @@ from inspectrum.models import (
 from inspectrum.peakfinding import find_peaks_in_spectrum
 from inspectrum.resolution import fwhm_at_d, parse_resolution_curve
 
-
 # ---------------------------------------------------------------------------
 # Coordinate transforms
 # ---------------------------------------------------------------------------
@@ -152,7 +151,8 @@ def inspect(
 
     # --- 2. Background subtraction ---
     background, bg_subtracted = estimate_background(
-        spectrum.y, win_size=bg_win_size,
+        spectrum.y,
+        win_size=bg_win_size,
     )
 
     # --- 3. Peak finding ---
@@ -166,14 +166,9 @@ def inspect(
     )
 
     # --- 4. Generate reflections per phase ---
-    active_phases = [
-        desc for desc in experiment.phases
-        if desc.phase is not None
-    ]
+    active_phases = [desc for desc in experiment.phases if desc.phase is not None]
     if not active_phases:
-        raise ValueError(
-            "No phases with loaded CIF data in the experiment description"
-        )
+        raise ValueError("No phases with loaded CIF data in the experiment description")
 
     d_min, d_max = float(d_axis.min()), float(d_axis.max())
     phase_reflections: dict[str, list[dict]] = {}
@@ -210,9 +205,7 @@ def inspect(
     # Noise floor from lower quartile of background-subtracted signal
     q25 = float(np.percentile(bg_subtracted, 25))
     lower_quarter = bg_subtracted[bg_subtracted <= q25]
-    noise_sigma = (
-        float(np.std(lower_quarter)) if len(lower_quarter) > 0 else 0.0
-    )
+    noise_sigma = float(np.std(lower_quarter)) if len(lower_quarter) > 0 else 0.0
     noise_sigma = max(noise_sigma, 1e-10)
 
     refinements = refine_all_phases(

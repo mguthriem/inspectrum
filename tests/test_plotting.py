@@ -7,7 +7,7 @@ import numpy as np
 
 matplotlib.use("Agg")
 
-from inspectrum.matching import MatchResult, MatchedPeak, PhaseMatch
+from inspectrum.matching import MatchedPeak, MatchResult, PhaseMatch
 from inspectrum.models import DiffractionSpectrum
 from inspectrum.plotting import (
     build_match_table,
@@ -112,7 +112,7 @@ def test_format_match_table_includes_headers_and_phase_columns() -> None:
 def test_plot_phase_matches_adds_phase_labels_to_legend() -> None:
     """Overlay plot should expose separate legend entries per phase."""
     x = np.linspace(0.8, 2.4, 200)
-    peaks = np.exp(-((x - 2.2) / 0.03) ** 2) + np.exp(-((x - 1.75) / 0.04) ** 2)
+    peaks = np.exp(-(((x - 2.2) / 0.03) ** 2)) + np.exp(-(((x - 1.75) / 0.04) ** 2))
     spectrum = DiffractionSpectrum(
         x=x,
         y=peaks,
@@ -142,7 +142,7 @@ def test_plot_phase_matches_adds_phase_labels_to_legend() -> None:
 def test_plot_phase_matches_accepts_full_reflection_lists() -> None:
     """Optional phase reflection lists should add faint expected ticks."""
     x = np.linspace(0.8, 2.4, 200)
-    peaks = np.exp(-((x - 2.2) / 0.03) ** 2)
+    peaks = np.exp(-(((x - 2.2) / 0.03) ** 2))
     spectrum = DiffractionSpectrum(
         x=x,
         y=peaks,
@@ -175,7 +175,7 @@ def test_plot_phase_matches_accepts_full_reflection_lists() -> None:
 def test_summarize_phase_matches_returns_plot_and_table() -> None:
     """Single-call helper should return the figure and the table text."""
     x = np.linspace(0.8, 2.4, 200)
-    peaks = np.exp(-((x - 2.2) / 0.03) ** 2)
+    peaks = np.exp(-(((x - 2.2) / 0.03) ** 2))
     spectrum = DiffractionSpectrum(
         x=x,
         y=peaks,
@@ -203,7 +203,7 @@ def test_summarize_phase_matches_returns_plot_and_table() -> None:
 def test_inspect_phase_matches_returns_table_text() -> None:
     """Interactive helper should still return the formatted table."""
     x = np.linspace(0.8, 2.4, 200)
-    peaks = np.exp(-((x - 2.2) / 0.03) ** 2)
+    peaks = np.exp(-(((x - 2.2) / 0.03) ** 2))
     spectrum = DiffractionSpectrum(
         x=x,
         y=peaks,

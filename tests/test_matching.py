@@ -16,18 +16,16 @@ import numpy as np
 import pytest
 
 from inspectrum.matching import (
-    MatchResult,
-    PhaseMatch,
     identify_phases,
     match_peaks_at_strain,
     sweep_pressure,
     sweep_strain,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_reflections(d_values: list[float], f_sq: float = 100.0) -> list[dict]:
     """Build a minimal reflection list from d-spacings."""
@@ -45,6 +43,7 @@ def _make_reflections(d_values: list[float], f_sq: float = 100.0) -> list[dict]:
 # ---------------------------------------------------------------------------
 # match_peaks_at_strain
 # ---------------------------------------------------------------------------
+
 
 class TestMatchPeaksAtStrain:
     """Test single-strain matching."""
@@ -96,7 +95,12 @@ class TestMatchPeaksAtStrain:
         """No observed peaks gives no matches."""
         refs = _make_reflections([3.0, 2.0])
         matches = match_peaks_at_strain(
-            np.array([]), np.array([]), np.array([]), refs, 1.0, 0.05,
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            refs,
+            1.0,
+            0.05,
         )
         assert len(matches) == 0
 
@@ -104,7 +108,12 @@ class TestMatchPeaksAtStrain:
         """No reflections gives no matches."""
         obs_d = np.array([3.0, 2.0])
         matches = match_peaks_at_strain(
-            obs_d, np.ones(2), np.full(2, 0.01), [], 1.0, 0.05,
+            obs_d,
+            np.ones(2),
+            np.full(2, 0.01),
+            [],
+            1.0,
+            0.05,
         )
         assert len(matches) == 0
 
@@ -156,6 +165,7 @@ class TestMatchPeaksAtStrain:
 # sweep_strain
 # ---------------------------------------------------------------------------
 
+
 class TestSweepStrain:
     """Test strain sweep."""
 
@@ -169,8 +179,13 @@ class TestSweepStrain:
         obs_fw = np.full(len(d_calc), 0.01)
 
         best_s, matches, score = sweep_strain(
-            obs_d, obs_h, obs_fw, refs, tolerance=0.02,
-            s_min=0.90, s_max=1.05,
+            obs_d,
+            obs_h,
+            obs_fw,
+            refs,
+            tolerance=0.02,
+            s_min=0.90,
+            s_max=1.05,
         )
         assert best_s == pytest.approx(true_strain, abs=0.001)
         assert len(matches) == len(d_calc)
@@ -178,8 +193,11 @@ class TestSweepStrain:
     def test_no_peaks_returns_default(self):
         """Empty input returns strain 1.0 and no matches."""
         best_s, matches, score = sweep_strain(
-            np.array([]), np.array([]), np.array([]),
-            _make_reflections([2.0]), tolerance=0.02,
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            _make_reflections([2.0]),
+            tolerance=0.02,
         )
         assert best_s == 1.0
         assert len(matches) == 0
@@ -188,8 +206,11 @@ class TestSweepStrain:
     def test_no_reflections_returns_default(self):
         """Empty reflections returns strain 1.0."""
         best_s, matches, score = sweep_strain(
-            np.array([2.0]), np.ones(1), np.full(1, 0.01),
-            [], tolerance=0.02,
+            np.array([2.0]),
+            np.ones(1),
+            np.full(1, 0.01),
+            [],
+            tolerance=0.02,
         )
         assert best_s == 1.0
         assert len(matches) == 0
@@ -204,8 +225,15 @@ class TestSweepStrain:
         obs_fw = np.full(4, 0.01)
 
         best_s, matches, score = sweep_strain(
-            obs_d, obs_h, obs_fw, refs, tolerance=0.02,
-            s_min=0.90, s_max=1.05, n_coarse=51, n_fine=201,
+            obs_d,
+            obs_h,
+            obs_fw,
+            refs,
+            tolerance=0.02,
+            s_min=0.90,
+            s_max=1.05,
+            n_coarse=51,
+            n_fine=201,
         )
         assert best_s == pytest.approx(true_strain, abs=0.001)
 
@@ -218,8 +246,13 @@ class TestSweepStrain:
         obs_fw = np.full(3, 0.01)
 
         best_s, matches, _ = sweep_strain(
-            obs_d, obs_h, obs_fw, refs, tolerance=0.02,
-            s_min=0.95, s_max=1.05,
+            obs_d,
+            obs_h,
+            obs_fw,
+            refs,
+            tolerance=0.02,
+            s_min=0.95,
+            s_max=1.05,
         )
         assert best_s == pytest.approx(1.0, abs=0.002)
         assert len(matches) == 3
@@ -228,6 +261,7 @@ class TestSweepStrain:
 # ---------------------------------------------------------------------------
 # identify_phases
 # ---------------------------------------------------------------------------
+
 
 class TestIdentifyPhases:
     """Test multi-phase identification."""
@@ -249,7 +283,9 @@ class TestIdentifyPhases:
         all_fw = np.full(len(all_obs), 0.01)
 
         result = identify_phases(
-            all_obs, all_h, all_fw,
+            all_obs,
+            all_h,
+            all_fw,
             {"A": refs_a, "B": refs_b},
             tolerance=0.02,
             strain_ranges={"A": (0.94, 1.02), "B": (0.90, 0.98)},
@@ -273,7 +309,9 @@ class TestIdentifyPhases:
         obs_fw = np.full(3, 0.01)
 
         result = identify_phases(
-            obs_d, obs_h, obs_fw,
+            obs_d,
+            obs_h,
+            obs_fw,
             {"A": refs},
             tolerance=0.02,
             strain_ranges={"A": (0.99, 1.01)},
@@ -293,7 +331,9 @@ class TestIdentifyPhases:
         obs_fw = np.full(1, 0.01)
 
         result = identify_phases(
-            obs_d, obs_h, obs_fw,
+            obs_d,
+            obs_h,
+            obs_fw,
             {"A": refs_a, "B": refs_b},
             tolerance=0.02,
             strain_ranges={"A": (0.99, 1.01), "B": (0.99, 1.01)},
@@ -315,7 +355,9 @@ class TestIdentifyPhases:
         obs_fw = np.full(5, 0.01)
 
         result = identify_phases(
-            obs_d, obs_h, obs_fw,
+            obs_d,
+            obs_h,
+            obs_fw,
             {"A": refs_a, "B": refs_b},
             tolerance=0.02,
             strain_ranges={"A": (0.99, 1.01), "B": (0.99, 1.01)},
@@ -331,7 +373,9 @@ class TestIdentifyPhases:
         obs_fw = np.full(1, 0.01)
 
         result = identify_phases(
-            obs_d, obs_h, obs_fw,
+            obs_d,
+            obs_h,
+            obs_fw,
             {"A": refs},
             tolerance=0.05,
         )
@@ -380,9 +424,11 @@ class TestSNAPIntegration:
 
         # Peak finding (in d-spacing)
         from inspectrum.engine import tof_to_d
+
         d_axis = tof_to_d(spec.x, inst)
         peak_table = find_peaks_in_spectrum(
-            d_axis, peaks,
+            d_axis,
+            peaks,
             resolution=(d_curve, fwhm_curve),
         )
 
@@ -411,7 +457,11 @@ class TestSNAPIntegration:
         obs_d, obs_h, obs_fw, phase_refs, tol, exp = snap_pipeline
 
         result = identify_phases(
-            obs_d, obs_h, obs_fw, phase_refs, tol,
+            obs_d,
+            obs_h,
+            obs_fw,
+            phase_refs,
+            tol,
             # Tungsten is a calibrant, strain should be near 1.0
             strain_ranges={"tungsten": (0.95, 1.05), "ice-VII": (0.80, 1.05)},
         )
@@ -422,16 +472,20 @@ class TestSNAPIntegration:
             None,
         )
         assert w_match is not None, "Tungsten not found in phase matches"
-        assert w_match.n_matched >= 2, (
-            f"Expected ≥2 tungsten peaks matched, got {w_match.n_matched}"
-        )
+        assert (
+            w_match.n_matched >= 2
+        ), f"Expected ≥2 tungsten peaks matched, got {w_match.n_matched}"
 
     def test_ice_vii_found(self, snap_pipeline):
         """Ice VII (sample) should be identified in SNAP data."""
         obs_d, obs_h, obs_fw, phase_refs, tol, exp = snap_pipeline
 
         result = identify_phases(
-            obs_d, obs_h, obs_fw, phase_refs, tol,
+            obs_d,
+            obs_h,
+            obs_fw,
+            phase_refs,
+            tol,
             strain_ranges={"tungsten": (0.95, 1.05), "ice-VII": (0.80, 1.05)},
         )
 
@@ -440,9 +494,9 @@ class TestSNAPIntegration:
             None,
         )
         assert ice_match is not None, "Ice VII not found in phase matches"
-        assert ice_match.n_matched >= 1, (
-            f"Expected ≥1 ice VII peaks matched, got {ice_match.n_matched}"
-        )
+        assert (
+            ice_match.n_matched >= 1
+        ), f"Expected ≥1 ice VII peaks matched, got {ice_match.n_matched}"
 
     def test_tungsten_strain_near_unity(self, snap_pipeline):
         """Tungsten calibrant should have strain close to 1.0.
@@ -454,13 +508,15 @@ class TestSNAPIntegration:
         obs_d, obs_h, obs_fw, phase_refs, tol, exp = snap_pipeline
 
         result = identify_phases(
-            obs_d, obs_h, obs_fw, phase_refs, tol,
+            obs_d,
+            obs_h,
+            obs_fw,
+            phase_refs,
+            tol,
             strain_ranges={"tungsten": (0.95, 1.05), "ice-VII": (0.80, 1.05)},
         )
 
-        w_match = next(
-            pm for pm in result.phase_matches if pm.phase_name == "tungsten"
-        )
+        w_match = next(pm for pm in result.phase_matches if pm.phase_name == "tungsten")
         # Tungsten is stiff but IS compressed at ~10 GPa (s ≈ 0.989).
         # With an independent strain sweep, recovery is approximate.
         assert w_match.strain == pytest.approx(1.0, abs=0.04)
@@ -470,7 +526,11 @@ class TestSNAPIntegration:
         obs_d, obs_h, obs_fw, phase_refs, tol, exp = snap_pipeline
 
         result = identify_phases(
-            obs_d, obs_h, obs_fw, phase_refs, tol,
+            obs_d,
+            obs_h,
+            obs_fw,
+            phase_refs,
+            tol,
             strain_ranges={"tungsten": (0.95, 1.05), "ice-VII": (0.80, 1.05)},
         )
 
@@ -486,16 +546,20 @@ class TestSNAPIntegration:
         obs_d, obs_h, obs_fw, phase_refs, tol, exp = snap_pipeline
 
         result = identify_phases(
-            obs_d, obs_h, obs_fw, phase_refs, tol,
+            obs_d,
+            obs_h,
+            obs_fw,
+            phase_refs,
+            tol,
             strain_ranges={"tungsten": (0.95, 1.05), "ice-VII": (0.80, 1.05)},
         )
 
         total_matched = sum(pm.n_matched for pm in result.phase_matches)
         total_obs = len(obs_d)
         # At least 30% of peaks should be matched
-        assert total_matched / total_obs > 0.3, (
-            f"Only {total_matched}/{total_obs} peaks matched"
-        )
+        assert (
+            total_matched / total_obs > 0.3
+        ), f"Only {total_matched}/{total_obs} peaks matched"
 
 
 # ---------------------------------------------------------------------------
@@ -519,10 +583,15 @@ class TestSweepPressure:
         from inspectrum.models import EquationOfState, PhaseDescription
 
         eos = EquationOfState(
-            eos_type=eos_type, V_0=V_0, K_0=K_0, K_prime=K_prime,
+            eos_type=eos_type,
+            V_0=V_0,
+            K_0=K_0,
+            K_prime=K_prime,
         )
         return PhaseDescription(
-            name=name, cif_path="", eos=eos,
+            name=name,
+            cif_path="",
+            eos=eos,
             stability_pressure=stability,
         )
 
@@ -542,10 +611,16 @@ class TestSweepPressure:
         obs_fw = np.full(len(d_calc), 0.01)
 
         best_P, result = sweep_pressure(
-            obs_d, obs_h, obs_fw,
-            [desc], {"A": refs}, tolerance=0.02,
-            P_min=0.0, P_max=40.0,
-            n_coarse=201, n_fine=201,
+            obs_d,
+            obs_h,
+            obs_fw,
+            [desc],
+            {"A": refs},
+            tolerance=0.02,
+            P_min=0.0,
+            P_max=40.0,
+            n_coarse=201,
+            n_fine=201,
         )
         assert best_P == pytest.approx(true_P, abs=0.5)
         pm = result.phase_matches[0]
@@ -557,8 +632,9 @@ class TestSweepPressure:
 
         # A stiff phase (like tungsten) and a soft phase (like ice)
         stiff = self._make_phase_desc("stiff", K_0=300.0, K_prime=4.3, V_0=32.0)
-        soft = self._make_phase_desc("soft", eos_type="birch-murnaghan",
-                                     K_0=25.0, K_prime=4.0, V_0=40.0)
+        soft = self._make_phase_desc(
+            "soft", eos_type="birch-murnaghan", K_0=25.0, K_prime=4.0, V_0=40.0
+        )
         true_P = 12.0
         s_stiff = predicted_strain(stiff.eos, true_P)
         s_soft = predicted_strain(soft.eos, true_P)
@@ -576,12 +652,16 @@ class TestSweepPressure:
         all_fw = np.full(len(all_obs), 0.01)
 
         best_P, result = sweep_pressure(
-            all_obs, all_h, all_fw,
+            all_obs,
+            all_h,
+            all_fw,
             [stiff, soft],
             {"stiff": refs_stiff, "soft": refs_soft},
             tolerance=0.02,
-            P_min=0.0, P_max=30.0,
-            n_coarse=201, n_fine=201,
+            P_min=0.0,
+            P_max=30.0,
+            n_coarse=201,
+            n_fine=201,
         )
         assert best_P == pytest.approx(true_P, abs=1.0)
         total_matched = sum(pm.n_matched for pm in result.phase_matches)
@@ -593,7 +673,9 @@ class TestSweepPressure:
 
         # Phase only stable above 20 GPa
         desc = self._make_phase_desc(
-            "high_P_only", K_0=100.0, V_0=30.0,
+            "high_P_only",
+            K_0=100.0,
+            V_0=30.0,
             stability=(20.0, None),
         )
         d_calc = [3.0, 2.0, 1.5]
@@ -606,9 +688,14 @@ class TestSweepPressure:
 
         # Sweep only in the range where the phase is NOT stable
         best_P, result = sweep_pressure(
-            obs_d, obs_h, obs_fw,
-            [desc], {"high_P_only": refs}, tolerance=0.02,
-            P_min=0.0, P_max=15.0,
+            obs_d,
+            obs_h,
+            obs_fw,
+            [desc],
+            {"high_P_only": refs},
+            tolerance=0.02,
+            P_min=0.0,
+            P_max=15.0,
         )
         # Phase should not appear (skipped due to stability)
         if result.phase_matches:
@@ -625,8 +712,12 @@ class TestSweepPressure:
         obs_fw = np.full(2, 0.01)
 
         best_P, result = sweep_pressure(
-            obs_d, obs_h, obs_fw,
-            [desc], {"no_eos": refs}, tolerance=0.02,
+            obs_d,
+            obs_h,
+            obs_fw,
+            [desc],
+            {"no_eos": refs},
+            tolerance=0.02,
         )
         assert best_P == 0.0
         assert len(result.phase_matches) == 0
@@ -636,8 +727,12 @@ class TestSweepPressure:
         desc = self._make_phase_desc("A")
         refs = _make_reflections([3.0])
         best_P, result = sweep_pressure(
-            np.array([]), np.array([]), np.array([]),
-            [desc], {"A": refs}, tolerance=0.02,
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            [desc],
+            {"A": refs},
+            tolerance=0.02,
         )
         assert best_P == 0.0
         assert len(result.phase_matches) == 0
@@ -669,7 +764,9 @@ class TestSweepPressureSNAP:
         d_curve, fwhm_curve = parse_resolution_curve(inst)
         d_axis = tof_to_d(spec.x, inst)
         peak_table = find_peaks_in_spectrum(
-            d_axis, peaks, resolution=(d_curve, fwhm_curve),
+            d_axis,
+            peaks,
+            resolution=(d_curve, fwhm_curve),
         )
         tol = fwhm_at_d(peak_table.positions, d_curve, fwhm_curve)
 
@@ -687,10 +784,16 @@ class TestSweepPressureSNAP:
         peak_table, phase_refs, tol, exp = snap_data
 
         best_P, result = sweep_pressure(
-            peak_table.positions, peak_table.heights, peak_table.fwhm,
-            exp.phases, phase_refs, tol,
-            P_min=0.0, P_max=60.0,
-            n_coarse=301, n_fine=201,
+            peak_table.positions,
+            peak_table.heights,
+            peak_table.fwhm,
+            exp.phases,
+            phase_refs,
+            tol,
+            P_min=0.0,
+            P_max=60.0,
+            n_coarse=301,
+            n_fine=201,
         )
         # SNAP DAC experiments typically 2-60 GPa.
         # Ice-VII is stable above 2.1 GPa.
@@ -701,10 +804,16 @@ class TestSweepPressureSNAP:
         peak_table, phase_refs, tol, exp = snap_data
 
         best_P, result = sweep_pressure(
-            peak_table.positions, peak_table.heights, peak_table.fwhm,
-            exp.phases, phase_refs, tol,
-            P_min=0.0, P_max=60.0,
-            n_coarse=301, n_fine=201,
+            peak_table.positions,
+            peak_table.heights,
+            peak_table.fwhm,
+            exp.phases,
+            phase_refs,
+            tol,
+            P_min=0.0,
+            P_max=60.0,
+            n_coarse=301,
+            n_fine=201,
         )
 
         w_match = next(
@@ -719,10 +828,16 @@ class TestSweepPressureSNAP:
         peak_table, phase_refs, tol, exp = snap_data
 
         best_P, result = sweep_pressure(
-            peak_table.positions, peak_table.heights, peak_table.fwhm,
-            exp.phases, phase_refs, tol,
-            P_min=0.0, P_max=60.0,
-            n_coarse=301, n_fine=201,
+            peak_table.positions,
+            peak_table.heights,
+            peak_table.fwhm,
+            exp.phases,
+            phase_refs,
+            tol,
+            P_min=0.0,
+            P_max=60.0,
+            n_coarse=301,
+            n_fine=201,
         )
 
         ice_match = next(
@@ -738,24 +853,33 @@ class TestSweepPressureSNAP:
 
         # Pressure sweep
         _, p_result = sweep_pressure(
-            peak_table.positions, peak_table.heights, peak_table.fwhm,
-            exp.phases, phase_refs, tol,
-            P_min=0.0, P_max=60.0,
-            n_coarse=301, n_fine=201,
+            peak_table.positions,
+            peak_table.heights,
+            peak_table.fwhm,
+            exp.phases,
+            phase_refs,
+            tol,
+            P_min=0.0,
+            P_max=60.0,
+            n_coarse=301,
+            n_fine=201,
         )
         p_matched = sum(pm.n_matched for pm in p_result.phase_matches)
 
         # Blind strain sweep
         s_result = identify_phases(
-            peak_table.positions, peak_table.heights, peak_table.fwhm,
-            phase_refs, tol,
+            peak_table.positions,
+            peak_table.heights,
+            peak_table.fwhm,
+            phase_refs,
+            tol,
             strain_ranges={"tungsten": (0.95, 1.05), "ice-VII": (0.80, 1.05)},
         )
         s_matched = sum(pm.n_matched for pm in s_result.phase_matches)
 
-        assert p_matched >= s_matched, (
-            f"Pressure sweep matched {p_matched}, blind sweep matched {s_matched}"
-        )
+        assert (
+            p_matched >= s_matched
+        ), f"Pressure sweep matched {p_matched}, blind sweep matched {s_matched}"
 
     def test_tungsten_strain_consistent_with_eos(self, snap_data):
         """Tungsten strain should match EOS prediction at found pressure."""
@@ -764,15 +888,19 @@ class TestSweepPressureSNAP:
         peak_table, phase_refs, tol, exp = snap_data
 
         best_P, result = sweep_pressure(
-            peak_table.positions, peak_table.heights, peak_table.fwhm,
-            exp.phases, phase_refs, tol,
-            P_min=0.0, P_max=60.0,
-            n_coarse=301, n_fine=201,
+            peak_table.positions,
+            peak_table.heights,
+            peak_table.fwhm,
+            exp.phases,
+            phase_refs,
+            tol,
+            P_min=0.0,
+            P_max=60.0,
+            n_coarse=301,
+            n_fine=201,
         )
 
-        w_match = next(
-            pm for pm in result.phase_matches if pm.phase_name == "tungsten"
-        )
+        w_match = next(pm for pm in result.phase_matches if pm.phase_name == "tungsten")
         w_desc = next(d for d in exp.phases if d.name == "tungsten")
         expected_strain = predicted_strain(w_desc.eos, best_P)
         # Strain in PhaseMatch is set by EOS, so should match exactly

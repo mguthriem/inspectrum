@@ -13,13 +13,12 @@ from inspectrum.lattice import (
     d2_inv_hexagonal,
     d2_inv_orthorhombic,
     d2_inv_tetragonal,
+    format_refinement_report,
     refine_all_phases,
     refine_lattice_parameters,
-    format_refinement_report,
 )
 from inspectrum.matching import MatchedPeak, MatchResult, PhaseMatch
 from inspectrum.models import CrystalPhase, EquationOfState, PhaseDescription
-
 
 # ---------------------------------------------------------------------------
 # d² inverse formulas
@@ -125,18 +124,20 @@ def _make_cubic_phase_match(
     matched = []
     for i, (h, k, l) in enumerate(hkl_list):
         d = a_true / np.sqrt(h**2 + k**2 + l**2)
-        matched.append(MatchedPeak(
-            obs_idx=i,
-            obs_d=d,
-            obs_height=1000.0,
-            obs_fwhm=0.01,
-            calc_d=d / strain,
-            strained_d=d,
-            hkl=(h, k, l),
-            multiplicity=1,
-            F_sq=1.0,
-            residual=0.0,
-        ))
+        matched.append(
+            MatchedPeak(
+                obs_idx=i,
+                obs_d=d,
+                obs_height=1000.0,
+                obs_fwhm=0.01,
+                calc_d=d / strain,
+                strained_d=d,
+                hkl=(h, k, l),
+                multiplicity=1,
+                F_sq=1.0,
+                residual=0.0,
+            )
+        )
 
     pm = PhaseMatch(
         phase_name="test_cubic",
@@ -149,8 +150,12 @@ def _make_cubic_phase_match(
 
     phase = CrystalPhase(
         name="test_cubic",
-        a=a_true / strain, b=a_true / strain, c=a_true / strain,
-        alpha=90.0, beta=90.0, gamma=90.0,
+        a=a_true / strain,
+        b=a_true / strain,
+        c=a_true / strain,
+        alpha=90.0,
+        beta=90.0,
+        gamma=90.0,
         space_group="I m -3 m",
         space_group_number=229,
     )
@@ -170,18 +175,20 @@ def _make_hex_phase_match(
     for i, (h, k, l) in enumerate(hkl_list):
         inv = (4.0 / 3.0) * (h**2 + h * k + k**2) / a_true**2 + l**2 / c_true**2
         d = 1.0 / np.sqrt(inv)
-        matched.append(MatchedPeak(
-            obs_idx=i,
-            obs_d=d,
-            obs_height=1000.0,
-            obs_fwhm=0.01,
-            calc_d=d / strain,
-            strained_d=d,
-            hkl=(h, k, l),
-            multiplicity=1,
-            F_sq=1.0,
-            residual=0.0,
-        ))
+        matched.append(
+            MatchedPeak(
+                obs_idx=i,
+                obs_d=d,
+                obs_height=1000.0,
+                obs_fwhm=0.01,
+                calc_d=d / strain,
+                strained_d=d,
+                hkl=(h, k, l),
+                multiplicity=1,
+                F_sq=1.0,
+                residual=0.0,
+            )
+        )
 
     pm = PhaseMatch(
         phase_name="test_hex",
@@ -194,8 +201,12 @@ def _make_hex_phase_match(
 
     phase = CrystalPhase(
         name="test_hex",
-        a=a_true / strain, b=a_true / strain, c=c_true / strain,
-        alpha=90.0, beta=90.0, gamma=120.0,
+        a=a_true / strain,
+        b=a_true / strain,
+        c=c_true / strain,
+        alpha=90.0,
+        beta=90.0,
+        gamma=120.0,
         space_group="P 63/m m c",
         space_group_number=194,
     )
@@ -215,7 +226,8 @@ class TestRefineCubic:
         """Refine from exact d-spacings should recover lattice param."""
         a_true = 3.16
         pm, desc = _make_cubic_phase_match(
-            a_true, [(1, 1, 0), (2, 0, 0), (2, 1, 1), (2, 2, 0)],
+            a_true,
+            [(1, 1, 0), (2, 0, 0), (2, 1, 1), (2, 2, 0)],
         )
         result = refine_lattice_parameters(pm, desc)
         assert result.success
@@ -237,7 +249,9 @@ class TestRefineCubic:
         strain = 0.99
         a_strained = a_cif * strain
         pm, desc = _make_cubic_phase_match(
-            a_strained, [(1, 1, 0), (2, 0, 0), (2, 1, 1)], strain=strain,
+            a_strained,
+            [(1, 1, 0), (2, 0, 0), (2, 1, 1)],
+            strain=strain,
         )
         result = refine_lattice_parameters(pm, desc)
         assert result.success
@@ -247,7 +261,8 @@ class TestRefineCubic:
         """Volume should be a³ for cubic."""
         a_true = 3.16
         pm, desc = _make_cubic_phase_match(
-            a_true, [(1, 1, 0), (2, 0, 0)],
+            a_true,
+            [(1, 1, 0), (2, 0, 0)],
         )
         result = refine_lattice_parameters(pm, desc)
         assert abs(result.volume - a_true**3) < 0.01
@@ -264,7 +279,9 @@ class TestRefineCubic:
             K_prime=4.32,
         )
         pm, desc = _make_cubic_phase_match(
-            a_strained, [(1, 1, 0), (2, 0, 0)], strain=strain,
+            a_strained,
+            [(1, 1, 0), (2, 0, 0)],
+            strain=strain,
         )
         desc.eos = eos
         result = refine_lattice_parameters(pm, desc)
@@ -276,7 +293,8 @@ class TestRefineCubic:
         """Peaks below prominence threshold should be excluded."""
         a_true = 3.16
         pm, desc = _make_cubic_phase_match(
-            a_true, [(1, 1, 0), (2, 0, 0), (2, 1, 1)],
+            a_true,
+            [(1, 1, 0), (2, 0, 0), (2, 1, 1)],
         )
         # Make one peak weak
         pm.matched_peaks[2] = MatchedPeak(
@@ -292,7 +310,8 @@ class TestRefineCubic:
             residual=0.0,
         )
         result = refine_lattice_parameters(
-            pm, desc,
+            pm,
+            desc,
             noise_sigma=0.5,
             min_prominence_sigma=5.0,
         )
@@ -312,7 +331,8 @@ class TestRefineHexagonal:
         """Refine from exact hex d-spacings should recover a and c."""
         a_true, c_true = 4.0, 6.0
         pm, desc = _make_hex_phase_match(
-            a_true, c_true,
+            a_true,
+            c_true,
             [(1, 0, 0), (0, 0, 1), (1, 0, 1), (1, 1, 0)],
         )
         result = refine_lattice_parameters(pm, desc)
@@ -346,7 +366,8 @@ class TestRefineAllPhases:
             unmatched_indices=[],
         )
         results = refine_all_phases(
-            match_result, [desc1, desc2],
+            match_result,
+            [desc1, desc2],
         )
         assert len(results) == 2
         assert all(r.success for r in results)
@@ -363,7 +384,9 @@ class TestFormatReport:
         r = LatticeRefinementResult(
             phase_name="tungsten",
             crystal_system="cubic",
-            a=3.16, b=3.16, c=3.16,
+            a=3.16,
+            b=3.16,
+            c=3.16,
             volume=31.6**3 / 1000,
             n_peaks_used=2,
             success=True,
@@ -409,7 +432,9 @@ class TestSNAPLatticeRefinement:
         d_curve, fwhm_curve = parse_resolution_curve(inst)
         d_axis = tof_to_d(spec.x, inst)
         pt = find_peaks_in_spectrum(
-            d_axis, peaks, resolution=(d_curve, fwhm_curve),
+            d_axis,
+            peaks,
+            resolution=(d_curve, fwhm_curve),
         )
         tol = fwhm_at_d(pt.positions, d_curve, fwhm_curve)
 
@@ -420,9 +445,16 @@ class TestSNAPLatticeRefinement:
                 phase_refs[desc.name] = refs
 
         best_P, result = sweep_pressure(
-            pt.positions, pt.heights, pt.fwhm,
-            exp.phases, phase_refs, tol,
-            P_min=0.0, P_max=60.0, n_coarse=301, n_fine=201,
+            pt.positions,
+            pt.heights,
+            pt.fwhm,
+            exp.phases,
+            phase_refs,
+            tol,
+            P_min=0.0,
+            P_max=60.0,
+            n_coarse=301,
+            n_fine=201,
         )
 
         # Noise estimate
@@ -436,7 +468,8 @@ class TestSNAPLatticeRefinement:
         """Tungsten lattice param should be close to CIF value."""
         best_P, result, phases, noise_sigma = snap_match
         refinements = refine_all_phases(
-            result, phases,
+            result,
+            phases,
             noise_sigma=noise_sigma,
         )
         w_ref = next((r for r in refinements if r.phase_name == "tungsten"), None)
@@ -449,7 +482,8 @@ class TestSNAPLatticeRefinement:
         """Ice VII lattice param should be significantly compressed."""
         best_P, result, phases, noise_sigma = snap_match
         refinements = refine_all_phases(
-            result, phases,
+            result,
+            phases,
             noise_sigma=noise_sigma,
         )
         ice_ref = next((r for r in refinements if r.phase_name == "ice-VII"), None)
@@ -463,7 +497,8 @@ class TestSNAPLatticeRefinement:
         """Both phases should give EOS-derived pressures."""
         best_P, result, phases, noise_sigma = snap_match
         refinements = refine_all_phases(
-            result, phases,
+            result,
+            phases,
             noise_sigma=noise_sigma,
         )
         for r in refinements:
@@ -474,7 +509,8 @@ class TestSNAPLatticeRefinement:
         """Phase pressures should be in the same ballpark (< 10 GPa spread)."""
         best_P, result, phases, noise_sigma = snap_match
         refinements = refine_all_phases(
-            result, phases,
+            result,
+            phases,
             noise_sigma=noise_sigma,
         )
         pressures = [r.pressure_gpa for r in refinements if r.pressure_gpa is not None]
@@ -486,7 +522,8 @@ class TestSNAPLatticeRefinement:
         """Report should be non-empty and contain phase names."""
         best_P, result, phases, noise_sigma = snap_match
         refinements = refine_all_phases(
-            result, phases,
+            result,
+            phases,
             noise_sigma=noise_sigma,
         )
         report = format_refinement_report(refinements, sweep_pressure_gpa=best_P)
