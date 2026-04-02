@@ -134,21 +134,31 @@ Seven files in `src/inspectrum/ui/`:
 
 | # | Task | Status |
 |---|------|--------|
-| 1 | **Test launch** on analysis cluster (RHEL9 with Mantid Workbench) | Not started |
-| 2 | **Load .nxs test data** via workspace mode and verify full pipeline | Not started |
-| 3 | **Visual polish**: field validation, sensible defaults, error messages | Not started |
+| 1 | **Test launch** on analysis cluster (RHEL9 with Mantid Workbench) | ✅ Done (2026-04-02) |
+| 2 | **End-to-end pipeline test** in Workbench: load spectrum + instprm + CIFs + EOS → Run → results | ✅ Done (2026-04-02) |
+| 3 | **Visual polish**: field validation, sensible defaults, error messages, UX improvements | Not started |
 | 4 | **Engine metadata for plotting**: bg_subtracted, spectrum, phase_reflections stored in result.metadata | ✅ Done |
 | 5 | **Manual phase definition** (define lattice params without CIF) | Deferred to v2 |
 
 ### 4.3 Launch Instructions
 
-From Mantid Workbench script console:
+**From Mantid Workbench (inside snapwrap pixi env):**
+
+The dev environment uses the snapwrap fork at
+`/SNS/SNAP/shared/Malcolm/code/forks/SNAPWrap` with `cryspy` added to its
+`[tool.pixi.pypi-dependencies]`. Setup:
+
+1. Activate the snapwrap pixi shell (from the fork directory)
+2. Launch workbench: `python -m workbench`
+3. In the Workbench script console:
 ```python
+import sys
+sys.path.insert(0, "/SNS/SNAP/shared/Malcolm/code/inspectrum/src")
 from inspectrum.ui import show
 show()
 ```
 
-For standalone development/testing (no Mantid required):
+**Standalone (no Mantid required):**
 ```python
 from inspectrum.ui import show_standalone
 show_standalone()

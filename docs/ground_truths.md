@@ -394,3 +394,28 @@ Built the interactive PyQt5 widget for launching from Mantid Workbench. Files in
 **Manual phase definition** (defining phases without a CIF file) deferred to v2.
 
 **314 tests still pass** after all changes. UI files are 0% coverage (need Qt for import — tested manually via `show_standalone()`).
+
+### 2026-04-02: Inspectrum UI running inside Mantid Workbench on RHEL9 analysis cluster
+
+**Milestone**: Phase 4.2 task 1 complete — inspectrum's `show()` successfully opens the `InspectrumWindow` dialog inside Mantid Workbench on the ORNL analysis cluster.
+
+**Dev environment setup**:
+- Uses the snapwrap fork at `/SNS/SNAP/shared/Malcolm/code/forks/SNAPWrap`
+- Added `cryspy = ">=0.10.0"` to snapwrap's `[tool.pixi.pypi-dependencies]` (cryspy is PyPI-only, not on conda-forge)
+- Activate the snapwrap pixi shell (e.g. `nsd-pixi-shell.sh` pointing at the fork)
+- Launch workbench: `python -m workbench`
+- In Workbench script console, inject inspectrum via `sys.path`:
+  ```python
+  import sys
+  sys.path.insert(0, "/SNS/SNAP/shared/Malcolm/code/inspectrum/src")
+  from inspectrum.ui import show
+  show()
+  ```
+
+**Key finding — cryspy duplication**: inspectrum's `pyproject.toml` had `cryspy` in both `[project].dependencies` and `[tool.pixi.pypi-dependencies]`. This caused pixi to error with "cryspy is already a dependency" when inspectrum was installed as an editable package. Fixed by removing the duplicate from `[tool.pixi.pypi-dependencies]` — pixi resolves it from `[project].dependencies` automatically.
+
+**Key finding — sys.path approach**: Rather than adding inspectrum as an editable pypi-dependency in snapwrap's toml (which triggered complex cross-project pixi resolution issues), the simpler approach is: install only `cryspy` in the snapwrap env, then `sys.path.insert()` inspectrum's `src/` directory at runtime. This avoids re-solving the full snapwrap environment and works reliably for dev/testing.
+
+**End-to-end pipeline verified** (2026-04-02): Loaded SNAP CSV spectrum + instprm + tungsten/ice-VII CIFs, entered EOS parameters manually in the UI, ran the pipeline, and got results displayed in the plot panel. Full pipeline works inside Mantid Workbench on the RHEL9 analysis cluster.
+
+**UX note**: EOS parameters must be entered manually per phase (select phase → set type/V₀/K₀/K′ → click "Apply EOS"). The "Load JSON" button loads single-phase JSON files (the format produced by "Save JSON"), not the multi-phase `snap_phases.json` format. Users should "Save JSON" per phase after first entry to avoid re-typing. UX improvements deferred to next session.

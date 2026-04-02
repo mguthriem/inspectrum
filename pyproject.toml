@@ -74,7 +74,9 @@ platforms = ["osx-arm64", "osx-64", "linux-64"]
 
 [tool.pixi.pypi-dependencies]
 inspectrum = { path = ".", editable = true }
-cryspy = ">=0.10.0"
+# cryspy is declared in [project].dependencies and resolved automatically
+# by pixi when inspectrum is installed as an editable package.
+# Listing it here too causes a "cryspy is already a dependency" error.
 
 [tool.pixi.dependencies]
 python = ">=3.10,<3.14"
